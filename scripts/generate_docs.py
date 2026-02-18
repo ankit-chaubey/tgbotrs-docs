@@ -496,13 +496,32 @@ def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <style>
-    :root {{
+    [data-theme="amoled"]{{
+      --bg:#000;--bg2:#0c0c0c;--bg3:#141414;--bg4:#1c1c1c;
+      --border:#1e1e1e;--border-bright:#2e2e2e;
+      --accent:#8b78ff;--accent-h:#a090ff;--accent2:#38bdf8;--accent3:#4ade80;--accent4:#f87171;
+      --text:#f0f0f0;--text-dim:#888;--text-muted:#444;
+      --rust:#fb923c;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;
+      --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
+      --code-bg:#111;--hdr-bg:rgba(0,0,0,.9);
+    }}
+    [data-theme="dark"]{{
       --bg:#0d0f17;--bg2:#131622;--bg3:#1a1d2e;--bg4:#21253a;
       --border:#2a2f47;--border-bright:#3d4468;
       --accent:#7c6af7;--accent-h:#9585ff;--accent2:#38bdf8;--accent3:#34d399;--accent4:#f87171;
       --text:#e2e8f0;--text-dim:#94a3b8;--text-muted:#64748b;
       --rust:#f97316;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;
       --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
+      --code-bg:#1a1d2e;--hdr-bg:rgba(13,15,23,.9);
+    }}
+    [data-theme="light"]{{
+      --bg:#f5f6fa;--bg2:#fff;--bg3:#f0f1f7;--bg4:#e8eaf2;
+      --border:#e0e3ef;--border-bright:#c8cde0;
+      --accent:#5b4fe8;--accent-h:#7466ef;--accent2:#0284c7;--accent3:#16a34a;--accent4:#dc2626;
+      --text:#0e1117;--text-dim:#4a5568;--text-muted:#9ca3af;
+      --rust:#ea580c;--yellow:#d97706;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--purple:#7c3aed;
+      --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
+      --code-bg:#1e1e2e;--hdr-bg:rgba(245,246,250,.92);
     }}
     *{{margin:0;padding:0;box-sizing:border-box}}
     html{{scroll-behavior:smooth}}
@@ -512,7 +531,7 @@ def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
     ::-webkit-scrollbar-thumb{{background:var(--border-bright);border-radius:3px}}
     ::-webkit-scrollbar-thumb:hover{{background:var(--accent)}}
 
-    .top-header{{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--header-h);background:rgba(13,15,23,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:24px}}
+    .top-header{{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--header-h);background:var(--hdr-bg,rgba(13,15,23,.92));backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:24px;overflow:visible}}
     .logo{{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}}
     .logo-icon{{width:38px;height:38px;background:linear-gradient(135deg,var(--accent),#e879f9);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;box-shadow:0 2px 12px rgba(124,106,247,.4)}}
     .logo-text{{font-size:18px;font-weight:800;color:var(--text)}}
@@ -650,6 +669,27 @@ def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
     .tab-panel.active{{display:block}}
     .method-card.hidden{{display:none}}
     .hljs{{background:transparent!important}}
+    body{{background:var(--bg);color:var(--text);transition:background .2s,color .2s}}
+    .theme-switcher{{display:flex;gap:2px;background:var(--bg3);border:1px solid var(--border-bright);border-radius:8px;padding:2px;flex-shrink:0}}
+    .th-btn{{padding:4px 9px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;line-height:1}}
+    .th-btn:hover{{color:var(--text)}}
+    .th-btn.on{{background:var(--accent);color:#fff;box-shadow:0 1px 6px rgba(124,106,247,.3)}}
+    .search-drop{{position:fixed;background:var(--bg2);border:1px solid var(--border-bright);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.6);z-index:99999;display:none;overflow:hidden;min-width:440px}}
+    .search-drop.open{{display:block}}
+    .sd-head{{padding:8px 14px 5px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);background:var(--bg3);border-bottom:1px solid var(--border)}}
+    .sd-list{{max-height:360px;overflow-y:auto}}
+    .sd-row{{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border)}}
+    .sd-row:last-child{{border-bottom:none}}
+    .sd-row:hover,.sd-row.focus{{background:var(--bg3)}}
+    .sd-dot{{width:7px;height:7px;border-radius:50%;flex-shrink:0}}
+    .sd-name{{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);flex-shrink:0;min-width:0}}
+    .sd-name mark{{background:rgba(139,120,255,.2);color:var(--accent);border-radius:2px;padding:0 1px;font-style:normal;font-weight:700}}
+    .sd-doc{{font-size:11px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+    .sd-cat{{font-size:10px;color:var(--text-muted);background:var(--bg4);padding:1px 6px;border-radius:4px;flex-shrink:0}}
+    .sd-empty{{padding:20px;text-align:center;color:var(--text-muted);font-size:13px}}
+    .sd-footer{{padding:6px 14px;font-size:10px;color:var(--text-muted);background:var(--bg3);border-top:1px solid var(--border);display:flex;justify-content:space-between}}
+    .sd-footer kbd{{background:var(--bg4);border:1px solid var(--border-bright);border-radius:3px;padding:0 4px;font-family:'JetBrains Mono',monospace;font-size:9px}}
+    [data-theme="light"] pre code{{color:#cdd6f4}}
     .footer{{margin-left:var(--sidebar-w);padding:40px 48px;border-top:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}}
     .footer-links{{display:flex;gap:20px}}
     .footer-links a{{font-size:13px;color:var(--text-muted);text-decoration:none}}
@@ -670,23 +710,39 @@ def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
 <body>
 
 <header class="top-header">
-  <a class="logo" href="#">
+  <a class="logo" href="https://tgbotrs.ankitchaubey.in">
     <div class="logo-icon">🦀</div>
     <span class="logo-text">tgbotrs</span>
     <span class="logo-version">v0.1.4</span>
   </a>
-  <div class="header-search">
+  <div class="header-search" id="searchOuter" style="flex:1;max-width:440px;position:relative">
     <span class="search-icon">🔍</span>
-    <input type="text" id="globalSearch" placeholder="Search methods, types… (Ctrl+K)" autocomplete="off">
+    <input type="text" id="globalSearch" placeholder="Search 165 methods… (Ctrl+K)" autocomplete="off">
+    <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--text-muted);background:var(--bg4);border:1px solid var(--border-bright);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;pointer-events:none">Ctrl K</span>
   </div>
-  <nav class="header-nav">
+  <nav class="header-nav" style="display:flex;align-items:center;gap:6px;margin-left:auto">
     <a href="#quick-start">Quick Start</a>
     <a href="#methods">Methods</a>
     <a href="#types">Types</a>
-    <a href="#errors">Errors</a>
+    <div class="theme-switcher">
+      <button class="th-btn" data-t="light" onclick="setTheme('light')" title="Light">☀️</button>
+      <button class="th-btn" data-t="dark" onclick="setTheme('dark')" title="Dark">🌙</button>
+      <button class="th-btn" data-t="amoled" onclick="setTheme('amoled')" title="AMOLED">⬛</button>
+    </div>
     <a href="https://github.com/ankit-chaubey/tgbotrs" target="_blank" class="btn-gh">⭐ GitHub</a>
   </nav>
 </header>
+
+<!-- Search dropdown — outside header so it's never clipped -->
+<div class="search-drop" id="searchDrop">
+  <div class="sd-head" id="sdHead">Methods</div>
+  <div class="sd-list" id="sdList"></div>
+  <div class="sd-footer">
+    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+    <span><kbd>↵</kbd> jump</span>
+    <span><kbd>Esc</kbd> close</span>
+  </div>
+</div>
 
 <div class="layout">
 <aside class="sidebar">
@@ -1102,24 +1158,46 @@ let wait_secs  = error.flood_wait_seconds(); // Option&lt;i64&gt;</code></pre>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', () => {{
-  document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-  document.addEventListener('keydown', e => {{
-    if ((e.ctrlKey||e.metaKey) && e.key==='k') {{e.preventDefault(); document.getElementById('globalSearch').focus();}}
+// ─── SEARCH INDEX ────────────────────────────────────────────────────────────
+const IDX = {{SEARCH_INDEX_PLACEHOLDER}};
+
+// ─── THEME ──────────────────────────────────────────────────────────────────
+function setTheme(t) {{
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('tg-theme', t);
+  document.querySelectorAll('.th-btn[data-t]').forEach(b => {{
+    b.classList.toggle('on', b.dataset.t === t);
   }});
+}}
+// Apply before DOM ready (avoids flash)
+document.documentElement.setAttribute('data-theme', localStorage.getItem('tg-theme') || 'amoled');
+document.addEventListener('DOMContentLoaded', () => {{
+  setTheme(localStorage.getItem('tg-theme') || 'amoled');
+  document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
 }});
 
+// ─── COPY ────────────────────────────────────────────────────────────────────
 function copyCode(btn) {{
-  const wrapper = btn.closest('.example-header');
-  const pre = wrapper ? wrapper.nextElementSibling : btn.closest('[style]').querySelector('pre');
-  const code = pre ? pre.innerText : '';
-  navigator.clipboard.writeText(code.trim()).then(() => {{
-    const orig = btn.textContent;
+  let el = btn, pre = null;
+  for (let i=0; i<8; i++) {{
+    el = el.parentElement; if (!el) break;
+    pre = el.querySelector('pre'); if (pre) break;
+  }}
+  const text = pre ? pre.innerText : '';
+  const orig = btn.textContent;
+  navigator.clipboard.writeText(text.trim()).then(() => {{
     btn.textContent = '✅ Copied!'; btn.classList.add('copied');
     setTimeout(() => {{ btn.textContent = orig; btn.classList.remove('copied'); }}, 2000);
+  }}).catch(() => {{
+    const ta = document.createElement('textarea');
+    ta.value = text.trim(); document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => {{ btn.textContent = orig; }}, 2000);
   }});
 }}
 
+// ─── SIDEBAR TOGGLE ──────────────────────────────────────────────────────────
 function toggleCat(btn) {{
   const id = btn.dataset.catId;
   const panel = document.getElementById('sidebar-' + id);
@@ -1129,6 +1207,7 @@ function toggleCat(btn) {{
   btn.classList.toggle('open', open);
 }}
 
+// ─── TABS ────────────────────────────────────────────────────────────────────
 function showTab(id, btn) {{
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1136,6 +1215,7 @@ function showTab(id, btn) {{
   btn.classList.add('active');
 }}
 
+// ─── CATEGORY FILTER ─────────────────────────────────────────────────────────
 function filterCat(cat, btn) {{
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
@@ -1149,46 +1229,162 @@ function filterCat(cat, btn) {{
   document.querySelectorAll('.cat-section').forEach(s => {{
     s.style.display = s.querySelectorAll('.method-card:not(.hidden)').length > 0 ? '' : 'none';
   }});
+  closeSearch();
 }}
 
-let searchT;
-document.getElementById('globalSearch').addEventListener('input', function() {{
-  clearTimeout(searchT);
-  searchT = setTimeout(() => {{
-    const q = this.value.toLowerCase().trim();
-    document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
-    let visible = 0;
-    document.querySelectorAll('.method-card').forEach(card => {{
-      const match = !q || card.dataset.name.includes(q) || card.textContent.toLowerCase().includes(q);
-      card.classList.toggle('hidden', !match);
-      if (match) visible++;
-    }});
-    document.getElementById('resultsCount').textContent = visible + ' methods';
-    document.querySelectorAll('.cat-section').forEach(s => {{
-      s.style.display = s.querySelectorAll('.method-card:not(.hidden)').length > 0 ? '' : 'none';
-    }});
-  }}, 150);
+// ─── SEARCH DROPDOWN ─────────────────────────────────────────────────────────
+const inp  = document.getElementById('globalSearch');
+const drop = document.getElementById('searchDrop');
+const list = document.getElementById('sdList');
+const head = document.getElementById('sdHead');
+let focused = -1;
+
+function positionDrop() {{
+  const r = document.getElementById('searchOuter').getBoundingClientRect();
+  drop.style.top   = (r.bottom + 5) + 'px';
+  drop.style.left  = Math.max(8, r.left) + 'px';
+  drop.style.width = Math.max(440, r.width) + 'px';
+}}
+function openSearch()  {{ positionDrop(); drop.classList.add('open'); }}
+function closeSearch() {{ drop.classList.remove('open'); focused = -1; }}
+
+function hl(str, q) {{
+  if (!q) return str;
+  const i = str.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return str;
+  return str.slice(0,i)+'<mark>'+str.slice(i,i+q.length)+'</mark>'+str.slice(i+q.length);
+}}
+
+function renderResults(q) {{
+  const ql = q.toLowerCase();
+  const all = IDX.filter(m => m.n.includes(ql) || m.d.toLowerCase().includes(ql));
+  const res = all.slice(0, 12);
+  head.textContent = 'Methods — ' + all.length + ' result' + (all.length!==1?'s':'');
+  if (!res.length) {{
+    list.innerHTML = '<div class="sd-empty">No methods match "<b>'+q+'</b>"</div>';
+  }} else {{
+    list.innerHTML = res.map(m => {{
+      const anchor = m.n.replace(/_/g, '-');
+      return `<div class="sd-row" data-anchor="${{anchor}}" onclick="goTo('${{anchor}}')">
+        <span class="sd-dot" style="background:${{m.col}}"></span>
+        <span class="sd-name">${{hl('bot.'+m.n+'()',q)}}</span>
+        <span class="sd-doc">${{hl(m.d,q)}}</span>
+        <span class="sd-cat">${{m.c}}</span>
+      </div>`;
+    }}).join('');
+  }}
+  focused = -1;
+}}
+
+function goTo(anchor) {{
+  closeSearch();
+  inp.value = '';
+  restoreAll();
+  const el = document.getElementById(anchor);
+  if (el) {{
+    el.scrollIntoView({{behavior:'smooth', block:'start'}});
+    el.style.outline = '2px solid var(--accent)';
+    el.style.outlineOffset = '3px';
+    setTimeout(() => {{ el.style.outline=''; el.style.outlineOffset=''; }}, 1200);
+  }}
+}}
+
+function restoreAll() {{
+  document.querySelectorAll('.method-card').forEach(c => c.classList.remove('hidden'));
+  document.querySelectorAll('.cat-section').forEach(s => s.style.display='');
+  document.getElementById('resultsCount').textContent = '165 methods';
+  document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
+}}
+
+inp.addEventListener('focus', () => {{ if (inp.value.trim()) openSearch(); }});
+inp.addEventListener('input', function() {{
+  const q = this.value.trim();
+  if (!q) {{ closeSearch(); restoreAll(); return; }}
+  renderResults(q);
+  openSearch();
+  const ql = q.toLowerCase();
+  let visible = 0;
+  document.querySelectorAll('.method-card').forEach(card => {{
+    const match = card.dataset.name.includes(ql) ||
+      (card.querySelector('.method-doc')?.textContent||'').toLowerCase().includes(ql);
+    card.classList.toggle('hidden', !match);
+    if (match) visible++;
+  }});
+  document.getElementById('resultsCount').textContent = visible + ' methods';
+  document.querySelectorAll('.cat-section').forEach(s => {{
+    s.style.display = s.querySelectorAll('.method-card:not(.hidden)').length > 0 ? '' : 'none';
+  }});
+  document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
 }});
 
-// Sidebar active method highlight
+document.addEventListener('click', e => {{
+  if (!inp.contains(e.target) && !drop.contains(e.target)) closeSearch();
+}});
+document.addEventListener('keydown', e => {{
+  if ((e.ctrlKey||e.metaKey) && e.key==='k') {{ e.preventDefault(); inp.focus(); inp.select(); }}
+  if (e.key==='Escape') closeSearch();
+  if (drop.classList.contains('open')) {{
+    const rows = list.querySelectorAll('.sd-row');
+    if (e.key==='ArrowDown') {{
+      e.preventDefault();
+      rows.forEach(r=>r.classList.remove('focus'));
+      focused = Math.min(rows.length-1, focused+1);
+      rows[focused]?.classList.add('focus');
+      rows[focused]?.scrollIntoView({{block:'nearest'}});
+    }}
+    if (e.key==='ArrowUp') {{
+      e.preventDefault();
+      rows.forEach(r=>r.classList.remove('focus'));
+      focused = Math.max(0, focused-1);
+      rows[focused]?.classList.add('focus');
+      rows[focused]?.scrollIntoView({{block:'nearest'}});
+    }}
+    if (e.key==='Enter') {{
+      const f = list.querySelector('.sd-row.focus');
+      if (f) goTo(f.dataset.anchor);
+    }}
+  }}
+}});
+window.addEventListener('resize', () => {{ if (drop.classList.contains('open')) positionDrop(); }});
+
+// ─── SIDEBAR ACTIVE HIGHLIGHT ────────────────────────────────────────────────
 const obs = new IntersectionObserver(entries => {{
   entries.forEach(e => {{
     if (e.isIntersecting) {{
       const id = e.target.id;
       document.querySelectorAll('.sidebar-method').forEach(a => {{
-        a.style.color = a.getAttribute('href') === '#'+id ? 'var(--accent)' : '';
+        const active = a.getAttribute('href') === '#'+id;
+        a.style.color = active ? 'var(--accent)' : '';
+        a.style.fontWeight = active ? '600' : '';
       }});
     }}
   }});
-}}, {{ rootMargin: '-10% 0px -70% 0px' }});
+}}, {{ rootMargin: '-8% 0px -70% 0px' }});
 document.querySelectorAll('.method-card').forEach(c => obs.observe(c));
 </script>
 </body>
 </html>'''
 
 
+# Build search index for dropdown
+import json as _json
+_search_idx = []
+for _m in methods:
+    _cat = categorize(_m['name'])
+    _color = {
+        'Sending Messages':'#818cf8','Getting Info':'#38bdf8','Configuration':'#34d399',
+        'Editing':'#fbbf24','Deletion':'#f87171','Forwarding and Copying':'#a78bfa',
+        'Answering Queries':'#2dd4bf','Chat Administration':'#fb923c',
+        'Invite and Membership':'#c084fc','Pinning':'#f472b6','Stickers':'#a3e635',
+        'Forum Topics':'#67e8f9','Updates and Webhook':'#818cf8','Games':'#4ade80',
+        'Payments and Stars':'#fcd34d','Stories':'#fb7185','Business':'#94a3b8','Other':'#6b7280',
+    }.get(_cat,'#7c6af7')
+    _search_idx.append({'n':_m['name'],'d':_m['doc'][:90],'c':_cat,'col':_color})
+_search_json = _json.dumps(_search_idx, separators=(',',':'))
+
 print("🏗️  Assembling final page...")
 html = assemble(method_cards, sidebar_html, types_html, enums_html, stats)
+html = html.replace('{SEARCH_INDEX_PLACEHOLDER}', _search_json)
 
 output_path = SITE_DIR / "index.html"
 output_path.write_text(html, encoding="utf-8")
