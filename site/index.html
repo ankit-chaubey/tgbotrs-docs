@@ -1,20 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="amoled">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>tgbotrs — Telegram Bot API for Rust</title>
+  <meta property="og:url" content="https://tgbotrs.ankitchaubey.in">
+  <link rel="canonical" href="https://tgbotrs.ankitchaubey.in">
   <meta name="description" content="Complete docs for tgbotrs — 165 methods, 257 types, fully async. By Ankit Chaubey.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <style>
-    :root {
+    /* AMOLED — pure black */
+    [data-theme="amoled"] {
+      --bg:#000000;--bg2:#0a0a0a;--bg3:#111111;--bg4:#1a1a1a;
+      --border:#1c1c1c;--border-bright:#2e2e2e;
+      --accent:#8b78ff;--accent-h:#a090ff;--accent2:#38bdf8;--accent3:#34d399;--accent4:#f87171;
+      --text:#f0f0f0;--text-dim:#888888;--text-muted:#444444;
+      --rust:#fb923c;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;
+      --card-bg:#0d0d0d;--header-bg:rgba(0,0,0,0.92);
+    }
+    /* DARK */
+    [data-theme="dark"] {
       --bg:#0d0f17;--bg2:#131622;--bg3:#1a1d2e;--bg4:#21253a;
       --border:#2a2f47;--border-bright:#3d4468;
       --accent:#7c6af7;--accent-h:#9585ff;--accent2:#38bdf8;--accent3:#34d399;--accent4:#f87171;
       --text:#e2e8f0;--text-dim:#94a3b8;--text-muted:#64748b;
       --rust:#f97316;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;
+      --card-bg:#131622;--header-bg:rgba(13,15,23,0.92);
+    }
+    /* LIGHT */
+    [data-theme="light"] {
+      --bg:#f8f9fc;--bg2:#ffffff;--bg3:#f1f3f9;--bg4:#e8ecf4;
+      --border:#dde1ed;--border-bright:#c8cedf;
+      --accent:#6355e8;--accent-h:#7466ef;--accent2:#0284c7;--accent3:#059669;--accent4:#dc2626;
+      --text:#0f1623;--text-dim:#374151;--text-muted:#9ca3af;
+      --rust:#ea580c;--yellow:#d97706;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--purple:#7c3aed;
+      --card-bg:#ffffff;--header-bg:rgba(248,249,252,0.92);
+    }
+    :root {
       --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
     }
     *{margin:0;padding:0;box-sizing:border-box}
@@ -178,6 +202,66 @@
       .cat-section{padding:0 24px 32px}
       .install-grid,.features-grid{grid-template-columns:1fr}
     }
+  
+    /* THEME BUTTON */
+    .theme-toggle{display:flex;align-items:center;gap:0;background:var(--bg3);border:1px solid var(--border-bright);border-radius:8px;overflow:hidden;padding:2px;gap:2px}
+    .theme-opt{padding:4px 9px;border-radius:6px;font-size:11px;font-weight:700;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+    .theme-opt.active{background:var(--accent);color:#fff;box-shadow:0 1px 6px rgba(124,106,247,.3)}
+    .theme-opt:not(.active):hover{color:var(--text);background:var(--bg4)}
+
+    /* SEARCH DROPDOWN */
+    .search-wrap{position:relative}
+    .search-dropdown{
+      position:absolute;top:calc(100% + 6px);left:0;right:0;
+      background:var(--bg2);border:1px solid var(--border-bright);
+      border-radius:var(--radius);box-shadow:0 12px 40px rgba(0,0,0,.5);
+      z-index:9999;display:none;overflow:hidden;
+    }
+    .search-dropdown.open{display:block}
+    .sd-results{max-height:380px;overflow-y:auto}
+    .sd-section-label{
+      padding:8px 14px 4px;font-size:9.5px;font-weight:700;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);
+      background:var(--bg3);border-bottom:1px solid var(--border);
+    }
+    .sd-item{
+      display:flex;align-items:center;gap:10px;
+      padding:9px 14px;cursor:pointer;
+      transition:background .12s;text-decoration:none;
+      border-bottom:1px solid var(--border);
+    }
+    .sd-item:last-child{border-bottom:none}
+    .sd-item:hover,.sd-item.sd-focused{background:var(--bg3)}
+    .sd-cat-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+    .sd-name{
+      font-family:'JetBrains Mono',monospace;font-size:12.5px;
+      color:var(--accent);flex:1;min-width:0;
+    }
+    .sd-name mark{background:rgba(124,106,247,.18);color:var(--accent);border-radius:2px;padding:0 1px;font-style:normal}
+    .sd-ret{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3);flex-shrink:0}
+    .sd-cat-tag{
+      font-size:10px;color:var(--text-muted);background:var(--bg4);
+      padding:1px 6px;border-radius:4px;flex-shrink:0;
+    }
+    .sd-doc{font-size:11px;color:var(--text-muted);flex:1.5;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sd-empty{padding:20px;text-align:center;color:var(--text-muted);font-size:13px}
+    .sd-footer{padding:6px 14px;font-size:10.5px;color:var(--text-muted);background:var(--bg3);border-top:1px solid var(--border);display:flex;justify-content:space-between}
+    .search-kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-muted);background:var(--bg4);border:1px solid var(--border-bright);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;pointer-events:none}
+
+    /* Override body/bg for themes */
+    body{background:var(--bg,#0d0f17);color:var(--text,#e2e8f0)}
+    .top-header{background:var(--header-bg,rgba(13,15,23,0.92)) !important}
+    .sidebar{background:var(--bg2) !important}
+    .method-card{background:var(--card-bg,var(--bg2)) !important}
+    .code-block{background:var(--bg3) !important}
+    [data-theme="light"] .code-block{background:#1e1e2e !important}
+    [data-theme="light"] .code-block code{color:#cdd6f4}
+    [data-theme="light"] .hero{background:var(--bg3)}
+    [data-theme="light"] .filter-bar{background:var(--bg2)}
+    [data-theme="light"] .method-footer a{color:var(--text-muted)}
+    [data-theme="light"] .footer{background:var(--bg2)}
+    [data-theme="light"] .sidebar{background:var(--bg2)}
+
   </style>
 </head>
 <body>
@@ -188,15 +272,29 @@
     <span class="logo-text">tgbotrs</span>
     <span class="logo-version">v0.1.4</span>
   </a>
-  <div class="header-search">
-    <span class="search-icon">🔍</span>
-    <input type="text" id="globalSearch" placeholder="Search methods, types… (Ctrl+K)" autocomplete="off">
+  <div class="header-search search-wrap">
+    <span class="search-icon" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:14px;color:var(--text-muted)">🔍</span>
+    <input type="text" id="globalSearch" placeholder="Search 165 methods… (Ctrl+K)" autocomplete="off" style="padding-right:60px">
+    <span class="search-kbd">Ctrl K</span>
+    <div class="search-dropdown" id="searchDropdown">
+      <div class="sd-results" id="sdResults"></div>
+      <div class="sd-footer">
+        <span>↑↓ navigate</span>
+        <span>↵ jump to method</span>
+        <span>Esc close</span>
+      </div>
+    </div>
   </div>
   <nav class="header-nav">
     <a href="#quick-start">Quick Start</a>
     <a href="#methods">Methods</a>
     <a href="#types">Types</a>
     <a href="#errors">Errors</a>
+    <div class="theme-toggle">
+      <button class="theme-opt" onclick="setTheme('light')" title="Light">☀️</button>
+      <button class="theme-opt" onclick="setTheme('dark')" title="Dark">🌙</button>
+      <button class="theme-opt active" onclick="setTheme('amoled')" title="AMOLED">⬛</button>
+    </div>
     <a href="https://github.com/ankit-chaubey/tgbotrs" target="_blank" class="btn-gh">⭐ GitHub</a>
   </nav>
 </header>
@@ -10555,24 +10653,73 @@ let wait_secs  = error.flood_wait_seconds(); // Option&lt;i64&gt;</code></pre>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
+// ── Search index (all 165 methods) ───────────────────────────────────────────
+const SEARCH_INDEX = [{"name": "send_animation", "anchor": "method-send-animation", "cat": "Sending Messages", "doc": "Use this method to send animation files (GIF or H.264/MPEG-4 AVC video without sound). On success, t", "ret": "Message"}, {"name": "send_audio", "anchor": "method-send-audio", "cat": "Sending Messages", "doc": "Use this method to send audio files, if you want Telegram clients to display them in the music playe", "ret": "Message"}, {"name": "send_chat_action", "anchor": "method-send-chat-action", "cat": "Sending Messages", "doc": "Use this method when you need to tell the user that something is happening on the bot's side. The st", "ret": "bool"}, {"name": "send_checklist", "anchor": "method-send-checklist", "cat": "Sending Messages", "doc": "Use this method to send a checklist on behalf of a connected business account. On success, the sent", "ret": "Message"}, {"name": "send_contact", "anchor": "method-send-contact", "cat": "Sending Messages", "doc": "Use this method to send phone contacts. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_dice", "anchor": "method-send-dice", "cat": "Sending Messages", "doc": "Use this method to send an animated emoji that will display a random value. On success, the sent Mes", "ret": "Message"}, {"name": "send_document", "anchor": "method-send-document", "cat": "Sending Messages", "doc": "Use this method to send general files. On success, the sent Message is returned. Bots can currently", "ret": "Message"}, {"name": "send_game", "anchor": "method-send-game", "cat": "Sending Messages", "doc": "Use this method to send a game. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_gift", "anchor": "method-send-gift", "cat": "Sending Messages", "doc": "Sends a gift to the given user or channel chat. The gift can't be converted to Telegram Stars by the", "ret": "bool"}, {"name": "send_invoice", "anchor": "method-send-invoice", "cat": "Sending Messages", "doc": "Use this method to send invoices. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_location", "anchor": "method-send-location", "cat": "Sending Messages", "doc": "Use this method to send point on the map. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_media_group", "anchor": "method-send-media-group", "cat": "Sending Messages", "doc": "Use this method to send a group of photos, videos, documents or audios as an album. Documents and au", "ret": "Vec&lt;Message&gt;"}, {"name": "send_message", "anchor": "method-send-message", "cat": "Sending Messages", "doc": "Use this method to send text messages. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_message_draft", "anchor": "method-send-message-draft", "cat": "Sending Messages", "doc": "Use this method to stream a partial message to a user while the message is being generated; supporte", "ret": "bool"}, {"name": "send_paid_media", "anchor": "method-send-paid-media", "cat": "Sending Messages", "doc": "Use this method to send paid media. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_photo", "anchor": "method-send-photo", "cat": "Sending Messages", "doc": "Use this method to send photos. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_poll", "anchor": "method-send-poll", "cat": "Sending Messages", "doc": "Use this method to send a native poll. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_sticker", "anchor": "method-send-sticker", "cat": "Sending Messages", "doc": "Use this method to send static .WEBP, animated .TGS, or video .WEBM stickers. On success, the sent M", "ret": "Message"}, {"name": "send_venue", "anchor": "method-send-venue", "cat": "Sending Messages", "doc": "Use this method to send information about a venue. On success, the sent Message is returned.", "ret": "Message"}, {"name": "send_video", "anchor": "method-send-video", "cat": "Sending Messages", "doc": "Use this method to send video files, Telegram clients support MPEG4 videos (other formats may be sen", "ret": "Message"}, {"name": "send_video_note", "anchor": "method-send-video-note", "cat": "Sending Messages", "doc": "As of v.4.0, Telegram clients support rounded square MPEG4 videos of up to 1 minute long. Use this m", "ret": "Message"}, {"name": "send_voice", "anchor": "method-send-voice", "cat": "Sending Messages", "doc": "Use this method to send audio files, if you want Telegram clients to display the file as a playable", "ret": "Message"}, {"name": "get_available_gifts", "anchor": "method-get-available-gifts", "cat": "Getting Info", "doc": "Returns the list of gifts that can be sent by the bot to users and channel chats. Requires no parame", "ret": "Gifts"}, {"name": "get_business_account_gifts", "anchor": "method-get-business-account-gifts", "cat": "Getting Info", "doc": "Returns the gifts received and owned by a managed business account. Requires the can_view_gifts_and_", "ret": "OwnedGifts"}, {"name": "get_business_account_star_balance", "anchor": "method-get-business-account-star-balance", "cat": "Getting Info", "doc": "Returns the amount of Telegram Stars owned by a managed business account. Requires the can_view_gift", "ret": "StarAmount"}, {"name": "get_business_connection", "anchor": "method-get-business-connection", "cat": "Getting Info", "doc": "Use this method to get information about the connection of the bot with a business account. Returns", "ret": "BusinessConnection"}, {"name": "get_chat", "anchor": "method-get-chat", "cat": "Getting Info", "doc": "Use this method to get up-to-date information about the chat. Returns a ChatFullInfo object on succe", "ret": "ChatFullInfo"}, {"name": "get_chat_administrators", "anchor": "method-get-chat-administrators", "cat": "Getting Info", "doc": "Use this method to get a list of administrators in a chat, which aren't bots. Returns an Array of Ch", "ret": "Vec&lt;ChatMember&gt;"}, {"name": "get_chat_gifts", "anchor": "method-get-chat-gifts", "cat": "Getting Info", "doc": "Returns the gifts owned by a chat. Returns OwnedGifts on success.", "ret": "OwnedGifts"}, {"name": "get_chat_member", "anchor": "method-get-chat-member", "cat": "Getting Info", "doc": "Use this method to get information about a member of a chat. The method is only guaranteed to work f", "ret": "ChatMember"}, {"name": "get_chat_member_count", "anchor": "method-get-chat-member-count", "cat": "Getting Info", "doc": "Use this method to get the number of members in a chat. Returns Int on success.", "ret": "i64"}, {"name": "get_chat_menu_button", "anchor": "method-get-chat-menu-button", "cat": "Getting Info", "doc": "Use this method to get the current value of the bot's menu button in a private chat, or the default", "ret": "MenuButton"}, {"name": "get_custom_emoji_stickers", "anchor": "method-get-custom-emoji-stickers", "cat": "Getting Info", "doc": "Use this method to get information about custom emoji stickers by their identifiers. Returns an Arra", "ret": "Vec&lt;Sticker&gt;"}, {"name": "get_file", "anchor": "method-get-file", "cat": "Getting Info", "doc": "Use this method to get basic information about a file and prepare it for downloading. For the moment", "ret": "File"}, {"name": "get_forum_topic_icon_stickers", "anchor": "method-get-forum-topic-icon-stickers", "cat": "Getting Info", "doc": "Use this method to get custom emoji stickers, which can be used as a forum topic icon by any user. R", "ret": "Vec&lt;Sticker&gt;"}, {"name": "get_game_high_scores", "anchor": "method-get-game-high-scores", "cat": "Getting Info", "doc": "Use this method to get data for high score tables. Will return the score of the specified user and s", "ret": "Vec&lt;GameHighScore&gt;"}, {"name": "get_me", "anchor": "method-get-me", "cat": "Getting Info", "doc": "A simple method for testing your bot's authentication token. Requires no parameters. Returns basic i", "ret": "User"}, {"name": "get_my_commands", "anchor": "method-get-my-commands", "cat": "Getting Info", "doc": "Use this method to get the current list of the bot's commands for the given scope and user language.", "ret": "Vec&lt;BotCommand&gt;"}, {"name": "get_my_default_administrator_rights", "anchor": "method-get-my-default-administrator-rights", "cat": "Getting Info", "doc": "Use this method to get the current default administrator rights of the bot. Returns ChatAdministrato", "ret": "ChatAdministratorRights"}, {"name": "get_my_description", "anchor": "method-get-my-description", "cat": "Getting Info", "doc": "Use this method to get the current bot description for the given user language. Returns BotDescripti", "ret": "BotDescription"}, {"name": "get_my_name", "anchor": "method-get-my-name", "cat": "Getting Info", "doc": "Use this method to get the current bot name for the given user language. Returns BotName on success.", "ret": "BotName"}, {"name": "get_my_short_description", "anchor": "method-get-my-short-description", "cat": "Getting Info", "doc": "Use this method to get the current bot short description for the given user language. Returns BotSho", "ret": "BotShortDescription"}, {"name": "get_my_star_balance", "anchor": "method-get-my-star-balance", "cat": "Getting Info", "doc": "A method to get the current Telegram Stars balance of the bot. Requires no parameters. On success, r", "ret": "StarAmount"}, {"name": "get_star_transactions", "anchor": "method-get-star-transactions", "cat": "Getting Info", "doc": "Returns the bot's Telegram Star transactions in chronological order. On success, returns a StarTrans", "ret": "StarTransactions"}, {"name": "get_sticker_set", "anchor": "method-get-sticker-set", "cat": "Getting Info", "doc": "Use this method to get a sticker set. On success, a StickerSet object is returned.", "ret": "StickerSet"}, {"name": "get_updates", "anchor": "method-get-updates", "cat": "Getting Info", "doc": "Use this method to receive incoming updates using long polling (wiki). Returns an Array of Update ob", "ret": "Vec&lt;Update&gt;"}, {"name": "get_user_chat_boosts", "anchor": "method-get-user-chat-boosts", "cat": "Getting Info", "doc": "Use this method to get the list of boosts added to a chat by a user. Requires administrator rights i", "ret": "UserChatBoosts"}, {"name": "get_user_gifts", "anchor": "method-get-user-gifts", "cat": "Getting Info", "doc": "Returns the gifts owned and hosted by a user. Returns OwnedGifts on success.", "ret": "OwnedGifts"}, {"name": "get_user_profile_audios", "anchor": "method-get-user-profile-audios", "cat": "Getting Info", "doc": "Use this method to get a list of profile audios for a user. Returns a UserProfileAudios object.", "ret": "UserProfileAudios"}, {"name": "get_user_profile_photos", "anchor": "method-get-user-profile-photos", "cat": "Getting Info", "doc": "Use this method to get a list of profile pictures for a user. Returns a UserProfilePhotos object.", "ret": "UserProfilePhotos"}, {"name": "get_webhook_info", "anchor": "method-get-webhook-info", "cat": "Getting Info", "doc": "Use this method to get current webhook status. Requires no parameters. On success, returns a Webhook", "ret": "WebhookInfo"}, {"name": "edit_chat_invite_link", "anchor": "method-edit-chat-invite-link", "cat": "Editing", "doc": "Use this method to edit a non-primary invite link created by the bot. The bot must be an administrat", "ret": "ChatInviteLink"}, {"name": "edit_chat_subscription_invite_link", "anchor": "method-edit-chat-subscription-invite-link", "cat": "Editing", "doc": "Use this method to edit a subscription invite link created by the bot. The bot must have the can_inv", "ret": "ChatInviteLink"}, {"name": "edit_forum_topic", "anchor": "method-edit-forum-topic", "cat": "Editing", "doc": "Use this method to edit name and icon of a topic in a forum supergroup chat or a private chat with a", "ret": "bool"}, {"name": "edit_general_forum_topic", "anchor": "method-edit-general-forum-topic", "cat": "Editing", "doc": "Use this method to edit the name of the 'General' topic in a forum supergroup chat. The bot must be", "ret": "bool"}, {"name": "edit_message_caption", "anchor": "method-edit-message-caption", "cat": "Editing", "doc": "Use this method to edit captions of messages. On success, if the edited message is not an inline mes", "ret": "serde_json::Value"}, {"name": "edit_message_checklist", "anchor": "method-edit-message-checklist", "cat": "Editing", "doc": "Use this method to edit a checklist on behalf of a connected business account. On success, the edite", "ret": "Message"}, {"name": "edit_message_live_location", "anchor": "method-edit-message-live-location", "cat": "Editing", "doc": "Use this method to edit live location messages. A location can be edited until its live_period expir", "ret": "serde_json::Value"}, {"name": "edit_message_media", "anchor": "method-edit-message-media", "cat": "Editing", "doc": "Use this method to edit animation, audio, document, photo, or video messages, or to add media to tex", "ret": "serde_json::Value"}, {"name": "edit_message_reply_markup", "anchor": "method-edit-message-reply-markup", "cat": "Editing", "doc": "Use this method to edit only the reply markup of messages. On success, if the edited message is not", "ret": "serde_json::Value"}, {"name": "edit_message_text", "anchor": "method-edit-message-text", "cat": "Editing", "doc": "Use this method to edit text and game messages. On success, if the edited message is not an inline m", "ret": "serde_json::Value"}, {"name": "edit_story", "anchor": "method-edit-story", "cat": "Editing", "doc": "Edits a story previously posted by the bot on behalf of a managed business account. Requires the can", "ret": "Story"}, {"name": "edit_user_star_subscription", "anchor": "method-edit-user-star-subscription", "cat": "Editing", "doc": "Allows the bot to cancel or re-enable extension of a subscription paid in Telegram Stars. Returns Tr", "ret": "bool"}, {"name": "delete_business_messages", "anchor": "method-delete-business-messages", "cat": "Deletion", "doc": "Delete messages on behalf of a business account. Requires the can_delete_sent_messages business bot", "ret": "bool"}, {"name": "delete_chat_photo", "anchor": "method-delete-chat-photo", "cat": "Deletion", "doc": "Use this method to delete a chat photo. Photos can't be changed for private chats. The bot must be a", "ret": "bool"}, {"name": "delete_chat_sticker_set", "anchor": "method-delete-chat-sticker-set", "cat": "Deletion", "doc": "Use this method to delete a group sticker set from a supergroup. The bot must be an administrator in", "ret": "bool"}, {"name": "delete_forum_topic", "anchor": "method-delete-forum-topic", "cat": "Deletion", "doc": "Use this method to delete a forum topic along with all its messages in a forum supergroup chat or a", "ret": "bool"}, {"name": "delete_message", "anchor": "method-delete-message", "cat": "Deletion", "doc": "Use this method to delete a message, including service messages, with the following limitations:", "ret": "bool"}, {"name": "delete_messages", "anchor": "method-delete-messages", "cat": "Deletion", "doc": "Use this method to delete multiple messages simultaneously. If some of the specified messages can't", "ret": "bool"}, {"name": "delete_my_commands", "anchor": "method-delete-my-commands", "cat": "Deletion", "doc": "Use this method to delete the list of the bot's commands for the given scope and user language. Afte", "ret": "bool"}, {"name": "delete_sticker_from_set", "anchor": "method-delete-sticker-from-set", "cat": "Deletion", "doc": "Use this method to delete a sticker from a set created by the bot. Returns True on success.", "ret": "bool"}, {"name": "delete_sticker_set", "anchor": "method-delete-sticker-set", "cat": "Deletion", "doc": "Use this method to delete a sticker set that was created by the bot. Returns True on success.", "ret": "bool"}, {"name": "delete_story", "anchor": "method-delete-story", "cat": "Deletion", "doc": "Deletes a story previously posted by the bot on behalf of a managed business account. Requires the c", "ret": "bool"}, {"name": "delete_webhook", "anchor": "method-delete-webhook", "cat": "Deletion", "doc": "Use this method to remove webhook integration if you decide to switch back to getUpdates. Returns Tr", "ret": "bool"}, {"name": "copy_message", "anchor": "method-copy-message", "cat": "Forwarding &amp; Copying", "doc": "Use this method to copy messages of any kind. Service messages, paid media messages, giveaway messag", "ret": "MessageId"}, {"name": "copy_messages", "anchor": "method-copy-messages", "cat": "Forwarding &amp; Copying", "doc": "Use this method to copy messages of any kind. If some of the specified messages can't be found or co", "ret": "Vec&lt;MessageId&gt;"}, {"name": "forward_message", "anchor": "method-forward-message", "cat": "Forwarding &amp; Copying", "doc": "Use this method to forward messages of any kind. Service messages and messages with protected conten", "ret": "Message"}, {"name": "forward_messages", "anchor": "method-forward-messages", "cat": "Forwarding &amp; Copying", "doc": "Use this method to forward multiple messages of any kind. If some of the specified messages can't be", "ret": "Vec&lt;MessageId&gt;"}, {"name": "answer_callback_query", "anchor": "method-answer-callback-query", "cat": "Answering Queries", "doc": "Use this method to send answers to callback queries sent from inline keyboards. The answer will be d", "ret": "bool"}, {"name": "answer_inline_query", "anchor": "method-answer-inline-query", "cat": "Answering Queries", "doc": "Use this method to send answers to an inline query. On success, True is returned.\n    /// No more th", "ret": "bool"}, {"name": "answer_pre_checkout_query", "anchor": "method-answer-pre-checkout-query", "cat": "Answering Queries", "doc": "Once the user has confirmed their payment and shipping details, the Bot API sends the final confirma", "ret": "bool"}, {"name": "answer_shipping_query", "anchor": "method-answer-shipping-query", "cat": "Answering Queries", "doc": "If you sent an invoice requesting a shipping address and the parameter is_flexible was specified, th", "ret": "bool"}, {"name": "answer_web_app_query", "anchor": "method-answer-web-app-query", "cat": "Answering Queries", "doc": "Use this method to set the result of an interaction with a Web App and send a corresponding message", "ret": "SentWebAppMessage"}, {"name": "ban_chat_member", "anchor": "method-ban-chat-member", "cat": "Chat Administration", "doc": "Use this method to ban a user in a group, a supergroup or a channel. In the case of supergroups and", "ret": "bool"}, {"name": "ban_chat_sender_chat", "anchor": "method-ban-chat-sender-chat", "cat": "Chat Administration", "doc": "Use this method to ban a channel chat in a supergroup or a channel. Until the chat is unbanned, the", "ret": "bool"}, {"name": "promote_chat_member", "anchor": "method-promote-chat-member", "cat": "Chat Administration", "doc": "Use this method to promote or demote a user in a supergroup or a channel. The bot must be an adminis", "ret": "bool"}, {"name": "restrict_chat_member", "anchor": "method-restrict-chat-member", "cat": "Chat Administration", "doc": "Use this method to restrict a user in a supergroup. The bot must be an administrator in the supergro", "ret": "bool"}, {"name": "unban_chat_member", "anchor": "method-unban-chat-member", "cat": "Chat Administration", "doc": "Use this method to unban a previously banned user in a supergroup or channel. The user will not retu", "ret": "bool"}, {"name": "unban_chat_sender_chat", "anchor": "method-unban-chat-sender-chat", "cat": "Chat Administration", "doc": "Use this method to unban a previously banned channel chat in a supergroup or channel. The bot must b", "ret": "bool"}, {"name": "approve_chat_join_request", "anchor": "method-approve-chat-join-request", "cat": "Invite &amp; Membership", "doc": "Use this method to approve a chat join request. The bot must be an administrator in the chat for thi", "ret": "bool"}, {"name": "approve_suggested_post", "anchor": "method-approve-suggested-post", "cat": "Invite &amp; Membership", "doc": "Use this method to approve a suggested post in a direct messages chat. The bot must have the 'can_po", "ret": "bool"}, {"name": "create_chat_invite_link", "anchor": "method-create-chat-invite-link", "cat": "Invite &amp; Membership", "doc": "Use this method to create an additional invite link for a chat. The bot must be an administrator in", "ret": "ChatInviteLink"}, {"name": "create_chat_subscription_invite_link", "anchor": "method-create-chat-subscription-invite-link", "cat": "Invite &amp; Membership", "doc": "Use this method to create a subscription invite link for a channel chat. The bot must have the can_i", "ret": "ChatInviteLink"}, {"name": "create_forum_topic", "anchor": "method-create-forum-topic", "cat": "Invite &amp; Membership", "doc": "Use this method to create a topic in a forum supergroup chat or a private chat with a user. In the c", "ret": "ForumTopic"}, {"name": "create_invoice_link", "anchor": "method-create-invoice-link", "cat": "Invite &amp; Membership", "doc": "Use this method to create a link for an invoice. Returns the created invoice link as String on succe", "ret": "String"}, {"name": "create_new_sticker_set", "anchor": "method-create-new-sticker-set", "cat": "Invite &amp; Membership", "doc": "Use this method to create a new sticker set owned by a user. The bot will be able to edit the sticke", "ret": "bool"}, {"name": "decline_chat_join_request", "anchor": "method-decline-chat-join-request", "cat": "Invite &amp; Membership", "doc": "Use this method to decline a chat join request. The bot must be an administrator in the chat for thi", "ret": "bool"}, {"name": "decline_suggested_post", "anchor": "method-decline-suggested-post", "cat": "Invite &amp; Membership", "doc": "Use this method to decline a suggested post in a direct messages chat. The bot must have the 'can_ma", "ret": "bool"}, {"name": "revoke_chat_invite_link", "anchor": "method-revoke-chat-invite-link", "cat": "Invite &amp; Membership", "doc": "Use this method to revoke an invite link created by the bot. If the primary link is revoked, a new l", "ret": "ChatInviteLink"}, {"name": "pin_chat_message", "anchor": "method-pin-chat-message", "cat": "Pinning", "doc": "Use this method to add a message to the list of pinned messages in a chat. In private chats and chan", "ret": "bool"}, {"name": "unpin_all_chat_messages", "anchor": "method-unpin-all-chat-messages", "cat": "Pinning", "doc": "Use this method to clear the list of pinned messages in a chat. In private chats and channel direct", "ret": "bool"}, {"name": "unpin_all_forum_topic_messages", "anchor": "method-unpin-all-forum-topic-messages", "cat": "Pinning", "doc": "Use this method to clear the list of pinned messages in a forum topic in a forum supergroup chat or", "ret": "bool"}, {"name": "unpin_all_general_forum_topic_messages", "anchor": "method-unpin-all-general-forum-topic-messages", "cat": "Pinning", "doc": "Use this method to clear the list of pinned messages in a General forum topic. The bot must be an ad", "ret": "bool"}, {"name": "unpin_chat_message", "anchor": "method-unpin-chat-message", "cat": "Pinning", "doc": "Use this method to remove a message from the list of pinned messages in a chat. In private chats and", "ret": "bool"}, {"name": "set_business_account_bio", "anchor": "method-set-business-account-bio", "cat": "Configuration", "doc": "Changes the bio of a managed business account. Requires the can_change_bio business bot right. Retur", "ret": "bool"}, {"name": "set_business_account_gift_settings", "anchor": "method-set-business-account-gift-settings", "cat": "Configuration", "doc": "Changes the privacy settings pertaining to incoming gifts in a managed business account. Requires th", "ret": "bool"}, {"name": "set_business_account_name", "anchor": "method-set-business-account-name", "cat": "Configuration", "doc": "Changes the first and last name of a managed business account. Requires the can_change_name business", "ret": "bool"}, {"name": "set_business_account_profile_photo", "anchor": "method-set-business-account-profile-photo", "cat": "Configuration", "doc": "Changes the profile photo of a managed business account. Requires the can_edit_profile_photo busines", "ret": "bool"}, {"name": "set_business_account_username", "anchor": "method-set-business-account-username", "cat": "Configuration", "doc": "Changes the username of a managed business account. Requires the can_change_username business bot ri", "ret": "bool"}, {"name": "set_chat_administrator_custom_title", "anchor": "method-set-chat-administrator-custom-title", "cat": "Configuration", "doc": "Use this method to set a custom title for an administrator in a supergroup promoted by the bot. Retu", "ret": "bool"}, {"name": "set_chat_description", "anchor": "method-set-chat-description", "cat": "Configuration", "doc": "Use this method to change the description of a group, a supergroup or a channel. The bot must be an", "ret": "bool"}, {"name": "set_chat_menu_button", "anchor": "method-set-chat-menu-button", "cat": "Configuration", "doc": "Use this method to change the bot's menu button in a private chat, or the default menu button. Retur", "ret": "bool"}, {"name": "set_chat_permissions", "anchor": "method-set-chat-permissions", "cat": "Configuration", "doc": "Use this method to set default chat permissions for all members. The bot must be an administrator in", "ret": "bool"}, {"name": "set_chat_photo", "anchor": "method-set-chat-photo", "cat": "Configuration", "doc": "Use this method to set a new profile photo for the chat. Photos can't be changed for private chats.", "ret": "bool"}, {"name": "set_chat_sticker_set", "anchor": "method-set-chat-sticker-set", "cat": "Configuration", "doc": "Use this method to set a new group sticker set for a supergroup. The bot must be an administrator in", "ret": "bool"}, {"name": "set_chat_title", "anchor": "method-set-chat-title", "cat": "Configuration", "doc": "Use this method to change the title of a chat. Titles can't be changed for private chats. The bot mu", "ret": "bool"}, {"name": "set_custom_emoji_sticker_set_thumbnail", "anchor": "method-set-custom-emoji-sticker-set-thumbnail", "cat": "Configuration", "doc": "Use this method to set the thumbnail of a custom emoji sticker set. Returns True on success.", "ret": "bool"}, {"name": "set_game_score", "anchor": "method-set-game-score", "cat": "Configuration", "doc": "Use this method to set the score of the specified user in a game message. On success, if the message", "ret": "serde_json::Value"}, {"name": "set_message_reaction", "anchor": "method-set-message-reaction", "cat": "Configuration", "doc": "Use this method to change the chosen reactions on a message. Service messages of some types can't be", "ret": "bool"}, {"name": "set_my_commands", "anchor": "method-set-my-commands", "cat": "Configuration", "doc": "Use this method to change the list of the bot's commands. See this manual for more details about bot", "ret": "bool"}, {"name": "set_my_default_administrator_rights", "anchor": "method-set-my-default-administrator-rights", "cat": "Configuration", "doc": "Use this method to change the default administrator rights requested by the bot when it's added as a", "ret": "bool"}, {"name": "set_my_description", "anchor": "method-set-my-description", "cat": "Configuration", "doc": "Use this method to change the bot's description, which is shown in the chat with the bot if the chat", "ret": "bool"}, {"name": "set_my_name", "anchor": "method-set-my-name", "cat": "Configuration", "doc": "Use this method to change the bot's name. Returns True on success.", "ret": "bool"}, {"name": "set_my_profile_photo", "anchor": "method-set-my-profile-photo", "cat": "Configuration", "doc": "Changes the profile photo of the bot. Returns True on success.", "ret": "bool"}, {"name": "set_my_short_description", "anchor": "method-set-my-short-description", "cat": "Configuration", "doc": "Use this method to change the bot's short description, which is shown on the bot's profile page and", "ret": "bool"}, {"name": "set_passport_data_errors", "anchor": "method-set-passport-data-errors", "cat": "Configuration", "doc": "Informs a user that some of the Telegram Passport elements they provided contains errors. The user w", "ret": "bool"}, {"name": "set_sticker_emoji_list", "anchor": "method-set-sticker-emoji-list", "cat": "Configuration", "doc": "Use this method to change the list of emoji assigned to a regular or custom emoji sticker. The stick", "ret": "bool"}, {"name": "set_sticker_keywords", "anchor": "method-set-sticker-keywords", "cat": "Configuration", "doc": "Use this method to change search keywords assigned to a regular or custom emoji sticker. The sticker", "ret": "bool"}, {"name": "set_sticker_mask_position", "anchor": "method-set-sticker-mask-position", "cat": "Configuration", "doc": "Use this method to change the mask position of a mask sticker. The sticker must belong to a sticker", "ret": "bool"}, {"name": "set_sticker_position_in_set", "anchor": "method-set-sticker-position-in-set", "cat": "Configuration", "doc": "Use this method to move a sticker in a set created by the bot to a specific position. Returns True o", "ret": "bool"}, {"name": "set_sticker_set_thumbnail", "anchor": "method-set-sticker-set-thumbnail", "cat": "Configuration", "doc": "Use this method to set the thumbnail of a regular or mask sticker set. The format of the thumbnail f", "ret": "bool"}, {"name": "set_sticker_set_title", "anchor": "method-set-sticker-set-title", "cat": "Configuration", "doc": "Use this method to set the title of a created sticker set. Returns True on success.", "ret": "bool"}, {"name": "set_user_emoji_status", "anchor": "method-set-user-emoji-status", "cat": "Configuration", "doc": "Changes the emoji status for a given user that previously allowed the bot to manage their emoji stat", "ret": "bool"}, {"name": "set_webhook", "anchor": "method-set-webhook", "cat": "Configuration", "doc": "Use this method to specify a URL and receive incoming updates via an outgoing webhook. Whenever ther", "ret": "bool"}, {"name": "close", "anchor": "method-close", "cat": "Updates &amp; Webhook", "doc": "Use this method to close the bot instance before moving it from one local server to another. You nee", "ret": "bool"}, {"name": "add_sticker_to_set", "anchor": "method-add-sticker-to-set", "cat": "Stickers", "doc": "Use this method to add a new sticker to a set created by the bot. Emoji sticker sets can have up to", "ret": "bool"}, {"name": "replace_sticker_in_set", "anchor": "method-replace-sticker-in-set", "cat": "Stickers", "doc": "Use this method to replace an existing sticker in a sticker set with a new one. The method is equiva", "ret": "bool"}, {"name": "upload_sticker_file", "anchor": "method-upload-sticker-file", "cat": "Stickers", "doc": "Use this method to upload a file with a sticker for later use in the createNewStickerSet, addSticker", "ret": "File"}, {"name": "close_forum_topic", "anchor": "method-close-forum-topic", "cat": "Forum Topics", "doc": "Use this method to close an open topic in a forum supergroup chat. The bot must be an administrator", "ret": "bool"}, {"name": "close_general_forum_topic", "anchor": "method-close-general-forum-topic", "cat": "Forum Topics", "doc": "Use this method to close an open 'General' topic in a forum supergroup chat. The bot must be an admi", "ret": "bool"}, {"name": "hide_general_forum_topic", "anchor": "method-hide-general-forum-topic", "cat": "Forum Topics", "doc": "Use this method to hide the 'General' topic in a forum supergroup chat. The bot must be an administr", "ret": "bool"}, {"name": "reopen_forum_topic", "anchor": "method-reopen-forum-topic", "cat": "Forum Topics", "doc": "Use this method to reopen a closed topic in a forum supergroup chat. The bot must be an administrato", "ret": "bool"}, {"name": "reopen_general_forum_topic", "anchor": "method-reopen-general-forum-topic", "cat": "Forum Topics", "doc": "Use this method to reopen a closed 'General' topic in a forum supergroup chat. The bot must be an ad", "ret": "bool"}, {"name": "unhide_general_forum_topic", "anchor": "method-unhide-general-forum-topic", "cat": "Forum Topics", "doc": "Use this method to unhide the 'General' topic in a forum supergroup chat. The bot must be an adminis", "ret": "bool"}, {"name": "convert_gift_to_stars", "anchor": "method-convert-gift-to-stars", "cat": "Payments &amp; Stars", "doc": "Converts a given regular gift to Telegram Stars. Requires the can_convert_gifts_to_stars business bo", "ret": "bool"}, {"name": "gift_premium_subscription", "anchor": "method-gift-premium-subscription", "cat": "Payments &amp; Stars", "doc": "Gifts a Telegram Premium subscription to the given user. Returns True on success.", "ret": "bool"}, {"name": "refund_star_payment", "anchor": "method-refund-star-payment", "cat": "Payments &amp; Stars", "doc": "Refunds a successful payment in Telegram Stars. Returns True on success.", "ret": "bool"}, {"name": "transfer_business_account_stars", "anchor": "method-transfer-business-account-stars", "cat": "Payments &amp; Stars", "doc": "Transfers Telegram Stars from the business account balance to the bot's balance. Requires the can_tr", "ret": "bool"}, {"name": "transfer_gift", "anchor": "method-transfer-gift", "cat": "Payments &amp; Stars", "doc": "Transfers an owned unique gift to another user. Requires the can_transfer_and_upgrade_gifts business", "ret": "bool"}, {"name": "upgrade_gift", "anchor": "method-upgrade-gift", "cat": "Payments &amp; Stars", "doc": "Upgrades a given regular gift to a unique gift. Requires the can_transfer_and_upgrade_gifts business", "ret": "bool"}, {"name": "post_story", "anchor": "method-post-story", "cat": "Stories", "doc": "Posts a story on behalf of a managed business account. Requires the can_manage_stories business bot", "ret": "Story"}, {"name": "repost_story", "anchor": "method-repost-story", "cat": "Stories", "doc": "Reposts a story on behalf of a business account from another business account. Both business account", "ret": "Story"}, {"name": "read_business_message", "anchor": "method-read-business-message", "cat": "Business", "doc": "Marks incoming message as read on behalf of a business account. Requires the can_read_messages busin", "ret": "bool"}, {"name": "remove_business_account_profile_photo", "anchor": "method-remove-business-account-profile-photo", "cat": "Business", "doc": "Removes the current profile photo of a managed business account. Requires the can_edit_profile_photo", "ret": "bool"}, {"name": "export_chat_invite_link", "anchor": "method-export-chat-invite-link", "cat": "Other", "doc": "Use this method to generate a new primary invite link for a chat; any previously generated primary l", "ret": "String"}, {"name": "leave_chat", "anchor": "method-leave-chat", "cat": "Other", "doc": "Use this method for your bot to leave a group, supergroup or channel. Returns True on success.", "ret": "bool"}, {"name": "log_out", "anchor": "method-log-out", "cat": "Other", "doc": "Use this method to log out from the cloud Bot API server before launching the bot locally. You must", "ret": "bool"}, {"name": "remove_chat_verification", "anchor": "method-remove-chat-verification", "cat": "Other", "doc": "Removes verification from a chat that is currently verified on behalf of the organization represente", "ret": "bool"}, {"name": "remove_my_profile_photo", "anchor": "method-remove-my-profile-photo", "cat": "Other", "doc": "Removes the profile photo of the bot. Requires no parameters. Returns True on success.", "ret": "bool"}, {"name": "remove_user_verification", "anchor": "method-remove-user-verification", "cat": "Other", "doc": "Removes verification from a user who is currently verified on behalf of the organization represented", "ret": "bool"}, {"name": "save_prepared_inline_message", "anchor": "method-save-prepared-inline-message", "cat": "Other", "doc": "Stores a message that can be sent by a user of a Mini App. Returns a PreparedInlineMessage object.", "ret": "PreparedInlineMessage"}, {"name": "stop_message_live_location", "anchor": "method-stop-message-live-location", "cat": "Other", "doc": "Use this method to stop updating a live location message before live_period expires. On success, if", "ret": "serde_json::Value"}, {"name": "stop_poll", "anchor": "method-stop-poll", "cat": "Other", "doc": "Use this method to stop a poll which was sent by the bot. On success, the stopped Poll is returned.", "ret": "Poll"}, {"name": "verify_chat", "anchor": "method-verify-chat", "cat": "Other", "doc": "Verifies a chat on behalf of the organization which is represented by the bot. Returns True on succe", "ret": "bool"}, {"name": "verify_user", "anchor": "method-verify-user", "cat": "Other", "doc": "Verifies a user on behalf of the organization which is represented by the bot. Returns True on succe", "ret": "bool"}];
+
+// Cat colors
+const CAT_COLORS = {
+  'Sending Messages':'#7c6af7','Getting Info':'#38bdf8','Configuration':'#34d399',
+  'Editing':'#fbbf24','Deletion':'#f87171','Forwarding & Copying':'#a78bfa',
+  'Answering Queries':'#2dd4bf','Chat Administration':'#fb923c',
+  'Invite & Membership':'#c084fc','Pinning':'#f472b6','Stickers':'#a3e635',
+  'Forum Topics':'#67e8f9','Updates & Webhook':'#818cf8','Games':'#4ade80',
+  'Payments & Stars':'#fcd34d','Stories':'#fb7185','Business':'#94a3b8','Other':'#6b7280',
+};
+
+// ── THEME ─────────────────────────────────────────────────────────────────────
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('tgbotrs-theme', t);
+  document.querySelectorAll('.theme-opt').forEach(b => {
+    b.classList.toggle('active', b.textContent.trim() === (t==='light'?'☀️':t==='dark'?'🌙':'⬛'));
+  });
+}
+(function() {
+  const saved = localStorage.getItem('tgbotrs-theme') || 'amoled';
+  setTheme(saved);
+})();
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-  document.addEventListener('keydown', e => {
-    if ((e.ctrlKey||e.metaKey) && e.key==='k') {e.preventDefault(); document.getElementById('globalSearch').focus();}
-  });
 });
 
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey) && e.key==='k') {
+    e.preventDefault();
+    const inp = document.getElementById('globalSearch');
+    inp.focus(); inp.select();
+  }
+  if (e.key==='Escape') closeDropdown();
+  if (e.key==='ArrowDown') navigateDropdown(1);
+  if (e.key==='ArrowUp') navigateDropdown(-1);
+  if (e.key==='Enter') pickFocused();
+});
+
+// ── COPY CODE ─────────────────────────────────────────────────────────────────
 function copyCode(btn) {
-  const wrapper = btn.closest('.example-header');
-  const pre = wrapper ? wrapper.nextElementSibling : btn.closest('[style]').querySelector('pre');
-  const code = pre ? pre.innerText : '';
-  navigator.clipboard.writeText(code.trim()).then(() => {
-    const orig = btn.textContent;
-    btn.textContent = '✅ Copied!'; btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+  const bar = btn.closest('.example-header, .install-card, [style]');
+  let pre = bar ? bar.nextElementSibling : null;
+  if (!pre || pre.tagName !== 'PRE') {
+    const sec = btn.closest('.example-section, .install-card, div');
+    pre = sec ? sec.querySelector('pre') : null;
+  }
+  const text = pre ? pre.innerText : '';
+  navigator.clipboard.writeText(text.trim()).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✅ Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text.trim(); document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.innerHTML = '✅ Copied!';
+    setTimeout(() => { btn.innerHTML = '📋 Copy'; }, 2000);
   });
 }
 
+// ── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
 function toggleCat(btn) {
   const id = btn.dataset.catId;
   const panel = document.getElementById('sidebar-' + id);
@@ -10582,6 +10729,7 @@ function toggleCat(btn) {
   btn.classList.toggle('open', open);
 }
 
+// ── TABS ──────────────────────────────────────────────────────────────────────
 function showTab(id, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -10589,6 +10737,7 @@ function showTab(id, btn) {
   btn.classList.add('active');
 }
 
+// ── CATEGORY FILTER ───────────────────────────────────────────────────────────
 function filterCat(cat, btn) {
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
@@ -10604,15 +10753,113 @@ function filterCat(cat, btn) {
   });
 }
 
-let searchT;
-document.getElementById('globalSearch').addEventListener('input', function() {
+// ── SEARCH WITH DROPDOWN ──────────────────────────────────────────────────────
+let searchT, focusedIdx = -1, currentResults = [];
+
+function highlight(str, q) {
+  if (!q) return str;
+  const idx = str.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return str;
+  return str.slice(0,idx) + '<mark>' + str.slice(idx,idx+q.length) + '</mark>' + str.slice(idx+q.length);
+}
+
+function openDropdown() { document.getElementById('searchDropdown').classList.add('open'); }
+function closeDropdown() {
+  document.getElementById('searchDropdown').classList.remove('open');
+  focusedIdx = -1;
+}
+
+function navigateDropdown(dir) {
+  const items = document.querySelectorAll('.sd-item');
+  if (!items.length) return;
+  items.forEach(i => i.classList.remove('sd-focused'));
+  focusedIdx = Math.max(0, Math.min(items.length - 1, focusedIdx + dir));
+  items[focusedIdx].classList.add('sd-focused');
+  items[focusedIdx].scrollIntoView({block:'nearest'});
+}
+
+function pickFocused() {
+  const focused = document.querySelector('.sd-item.sd-focused');
+  if (focused) { focused.click(); }
+}
+
+function goToMethod(anchor) {
+  closeDropdown();
+  document.getElementById('globalSearch').value = '';
+  // Reset filters
+  document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
+  document.querySelectorAll('.method-card').forEach(c => c.classList.remove('hidden'));
+  document.querySelectorAll('.cat-section').forEach(s => s.style.display = '');
+  document.getElementById('resultsCount').textContent = '165 methods';
+  // Navigate
+  const el = document.getElementById(anchor);
+  if (el) {
+    el.scrollIntoView({behavior:'smooth', block:'start'});
+    el.classList.add('highlight-pulse');
+    setTimeout(() => el.classList.remove('highlight-pulse'), 1200);
+  }
+}
+
+const searchInput = document.getElementById('globalSearch');
+const dropdown = document.getElementById('searchDropdown');
+const sdResults = document.getElementById('sdResults');
+
+searchInput.addEventListener('focus', () => {
+  if (searchInput.value.trim()) openDropdown();
+});
+
+document.addEventListener('click', e => {
+  if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
+});
+
+searchInput.addEventListener('input', function() {
   clearTimeout(searchT);
-  searchT = setTimeout(() => {
-    const q = this.value.toLowerCase().trim();
+  const q = this.value.trim();
+
+  if (!q) {
+    closeDropdown();
+    // Also restore all cards
     document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
+    document.querySelectorAll('.method-card').forEach(c => c.classList.remove('hidden'));
+    document.querySelectorAll('.cat-section').forEach(s => s.style.display = '');
+    document.getElementById('resultsCount').textContent = '165 methods';
+    return;
+  }
+
+  searchT = setTimeout(() => {
+    const ql = q.toLowerCase();
+    // Filter dropdown results
+    const matches = SEARCH_INDEX.filter(m =>
+      m.name.includes(ql) || (m.doc && m.doc.toLowerCase().includes(ql))
+    ).slice(0, 12);
+
+    currentResults = matches;
+    focusedIdx = -1;
+
+    if (!matches.length) {
+      sdResults.innerHTML = '<div class="sd-empty">No methods matching "<strong>' + q + '</strong>"</div>';
+    } else {
+      sdResults.innerHTML = '<div class="sd-section-label">Methods (' + matches.length + (SEARCH_INDEX.filter(m=>m.name.includes(ql)||(m.doc&&m.doc.toLowerCase().includes(ql))).length > 12 ? '+' : '') + ')</div>' +
+        matches.map(m => {
+          const color = CAT_COLORS[m.cat] || '#7c6af7';
+          const nameHl = highlight('bot.' + m.name + '()', q);
+          const docHl = m.doc ? highlight(m.doc.slice(0,80), q) : '';
+          return `<a class="sd-item" href="javascript:void(0)" onclick="goToMethod('${m.anchor}')">
+            <span class="sd-cat-dot" style="background:${color}"></span>
+            <span class="sd-name">${nameHl}</span>
+            <span class="sd-doc">${docHl}</span>
+            <span class="sd-ret">${m.ret}</span>
+            <span class="sd-cat-tag">${m.cat}</span>
+          </a>`;
+        }).join('');
+    }
+    openDropdown();
+
+    // Also filter main content
     let visible = 0;
     document.querySelectorAll('.method-card').forEach(card => {
-      const match = !q || card.dataset.name.includes(q) || card.textContent.toLowerCase().includes(q);
+      const name = card.dataset.name || '';
+      const match = name.includes(ql) || card.querySelector('.method-doc')?.textContent.toLowerCase().includes(ql);
       card.classList.toggle('hidden', !match);
       if (match) visible++;
     });
@@ -10620,21 +10867,33 @@ document.getElementById('globalSearch').addEventListener('input', function() {
     document.querySelectorAll('.cat-section').forEach(s => {
       s.style.display = s.querySelectorAll('.method-card:not(.hidden)').length > 0 ? '' : 'none';
     });
-  }, 150);
+    document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
+  }, 120);
 });
 
-// Sidebar active method highlight
+// ── SIDEBAR ACTIVE HIGHLIGHT ON SCROLL ───────────────────────────────────────
 const obs = new IntersectionObserver(entries => {
   entries.forEach(e => {
     if (e.isIntersecting) {
       const id = e.target.id;
       document.querySelectorAll('.sidebar-method').forEach(a => {
-        a.style.color = a.getAttribute('href') === '#'+id ? 'var(--accent)' : '';
+        const active = a.getAttribute('href') === '#'+id;
+        a.style.color = active ? 'var(--accent)' : '';
+        a.style.fontWeight = active ? '600' : '';
       });
     }
   });
 }, { rootMargin: '-10% 0px -70% 0px' });
 document.querySelectorAll('.method-card').forEach(c => obs.observe(c));
 </script>
+
+<style>
+@keyframes highlightPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(124,106,247,.5), 0 0 0 3px rgba(124,106,247,.2); border-color: var(--accent); }
+  70%  { box-shadow: 0 0 0 8px rgba(124,106,247,0),  0 0 0 3px rgba(124,106,247,0); }
+  100% { box-shadow: none; border-color: var(--border); }
+}
+.highlight-pulse { animation: highlightPulse .9s ease-out; }
+</style>
 </body>
 </html>

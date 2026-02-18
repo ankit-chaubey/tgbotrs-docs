@@ -483,12 +483,15 @@ stats = {
 def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
     S = stats
     return f'''<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="amoled">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>tgbotrs — Telegram Bot API for Rust</title>
   <meta name="description" content="Complete docs for tgbotrs — {S["methods"]} methods, {S["types"]} types, fully async. By Ankit Chaubey.">
+  <meta property="og:title" content="tgbotrs — Rust Telegram Bot Library">
+  <meta property="og:url" content="https://tgbotrs.ankitchaubey.in">
+  <link rel="canonical" href="https://tgbotrs.ankitchaubey.in">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
