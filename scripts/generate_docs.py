@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
-tgbotrs Documentation Generator
-================================
-Parses the tgbotrs Rust source files and generates a complete,
-interactive documentation website.
+tgbotrs Documentation Generator  ·  v2 (improved)
+===================================================
+Parses tgbotrs Rust source files and generates a complete,
+interactive, mobile-first documentation website.
+
+  • Liquid-glass premium design
+  • ALL fields shown — no truncation
+  • Mobile-first: hamburger sidebar, bottom nav, theme toggle
+  • Custom domain: auto-generates CNAME
+  • Lowest supported version: 0.1.4
 
 Developed by Ankit Chaubey <ankitchaubey.dev@gmail.com>
 GitHub: https://github.com/ankit-chaubey/tgbotrs
@@ -12,28 +18,26 @@ Usage:
     python3 scripts/generate_docs.py
 
 Output:
-    site/index.html  — The full docs website (self-contained, no build tools)
+    site/index.html  — full self-contained docs site
+    site/CNAME       — custom domain file for GitHub Pages
 """
 
 import re
 import json
 import os
-import sys
 from pathlib import Path
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+CRATE_VERSION  = "0.1.4"
+CUSTOM_DOMAIN  = "tgbotrs.ankitchaubey.in"
 
 SCRIPT_DIR = Path(__file__).parent
 ROOT_DIR   = SCRIPT_DIR.parent
 SRC_DIR    = ROOT_DIR / "tgbotrs" / "src"
 SITE_DIR   = ROOT_DIR / "site"
-
 SITE_DIR.mkdir(exist_ok=True)
 
 print("📂 Source dir:", SRC_DIR)
-print("📂 Site dir:", SITE_DIR)
-
-# ── Load source files ─────────────────────────────────────────────────────────
+print("📂 Site dir:",   SITE_DIR)
 
 def load(path):
     try:
@@ -42,346 +46,229 @@ def load(path):
         print(f"⚠️  File not found: {path}")
         return ""
 
-gen_methods  = load(SRC_DIR / "gen_methods.rs")
-gen_types    = load(SRC_DIR / "gen_types.rs")
-hand_types   = load(SRC_DIR / "types.rs")
-lib_src      = load(SRC_DIR / "lib.rs")
-bot_src      = load(SRC_DIR / "bot.rs")
-polling_src  = load(SRC_DIR / "polling.rs")
-error_src    = load(SRC_DIR / "error.rs")
-webhook_src  = load(SRC_DIR / "webhook.rs")
-reply_src    = load(SRC_DIR / "reply_markup.rs")
-chat_id_src  = load(SRC_DIR / "chat_id.rs")
-
+gen_methods = load(SRC_DIR / "gen_methods.rs")
+gen_types   = load(SRC_DIR / "gen_types.rs")
+hand_types  = load(SRC_DIR / "types.rs")
 print("✅ Source files loaded")
 
-# ── Parse Methods ────────────────────────────────────────────────────────────
-
+# ── Parse Methods ───────────────────────────────────────────────────────────────
 def parse_methods(content):
-    """Extract all method definitions from gen_methods.rs."""
-    # Split into impl Bot blocks
     all_blocks = re.split(r'\nimpl Bot \{', content)
     methods = []
-
     for block in all_blocks:
         m = re.search(
             r'/// (.*?)\n\s+/// See: (https://[^\n]+)\n\s+pub async fn (\w+)\(\s*&self,?(.*?)\)\s*->\s*Result<([^,\n{]+)',
             block, re.DOTALL)
-        if not m:
-            continue
-
-        doc     = m.group(1).strip()
-        url     = m.group(2).strip()
-        name    = m.group(3)
-        raw_p   = m.group(4)
-        ret     = m.group(5).strip()
-
+        if not m: continue
+        doc, url, name, raw_p, ret = m.group(1).strip(), m.group(2).strip(), m.group(3), m.group(4), m.group(5).strip()
         params_clean = re.sub(r'\s+', ' ', raw_p.strip()).rstrip(',')
         param_list   = _parse_param_list(params_clean)
-
-        methods.append({
-            'name':       name,
-            'doc':        doc,
-            'url':        url,
-            'params':     params_clean,
-            'param_list': param_list,
-            'ret':        ret,
-        })
-
+        methods.append({'name':name,'doc':doc,'url':url,'params':params_clean,'param_list':param_list,'ret':ret})
     return methods
 
-
 def _parse_param_list(raw):
-    """Split 'name: Type, ...' into list, respecting angle brackets."""
-    params = []
-    depth, cur = 0, ''
+    params=[]; depth,cur=0,''
     for ch in raw:
-        if ch in '<([': depth += 1
-        elif ch in '>)]': depth -= 1
-        if ch == ',' and depth == 0:
-            _add_param(params, cur)
-            cur = ''
-        else:
-            cur += ch
-    _add_param(params, cur)
+        if ch in '<([': depth+=1
+        elif ch in '>)]': depth-=1
+        if ch==',' and depth==0: _add_param(params,cur); cur=''
+        else: cur+=ch
+    _add_param(params,cur)
     return params
 
+def _add_param(lst,raw):
+    raw=raw.strip()
+    if not raw: return
+    parts=raw.split(':',1)
+    if len(parts)==2: lst.append({'name':parts[0].strip(),'type':parts[1].strip()})
 
-def _add_param(lst, raw):
-    raw = raw.strip()
-    if not raw:
-        return
-    parts = raw.split(':', 1)
-    if len(parts) == 2:
-        lst.append({'name': parts[0].strip(), 'type': parts[1].strip()})
-
-
-# ── Parse Optional Param Structs ─────────────────────────────────────────────
-
+# ── Parse Optional Param Structs ────────────────────────────────────────────────
 def parse_param_structs(content):
-    """Extract optional parameter structs and their fields."""
     pattern = re.compile(
-        r'/// Optional parameters for \[`Bot::(\w+)`\]\n'
-        r'#\[derive[^\]]+\]\n'
-        r'pub struct (\w+) \{(.*?)\}\n',
+        r'/// Optional parameters for \[`Bot::(\w+)`\]\n#\[derive[^\]]+\]\npub struct (\w+) \{(.*?)\}\n',
         re.DOTALL)
-    result = {}
-    for method, struct_name, fields_raw in pattern.findall(content):
-        fields = re.findall(
-            r'/// ([^\n]+)\n\s+(?:#\[serde[^\]]+\]\n\s+)?pub (\w+): ([^,\n]+)',
-            fields_raw)
-        result[method] = {
-            'struct': struct_name,
-            'fields': [
-                {'doc': d.strip(), 'name': n.strip(), 'type': t.strip().rstrip(',')}
-                for d, n, t in fields
-            ]
-        }
+    result={}
+    for method,struct_name,fields_raw in pattern.findall(content):
+        fields=re.findall(r'/// ([^\n]+)\n\s+(?:#\[serde[^\]]+\]\n\s+)?pub (\w+): ([^,\n]+)',fields_raw)
+        result[method]={'struct':struct_name,'fields':[{'doc':d.strip(),'name':n.strip(),'type':t.strip().rstrip(',')} for d,n,t in fields]}
     return result
 
-
-# ── Parse Types ───────────────────────────────────────────────────────────────
-
+# ── Parse Types ─────────────────────────────────────────────────────────────────
 def parse_structs(content):
-    structs = []
-    for name, body in re.findall(r'pub struct (\w+) \{([^}]+)\}', content):
-        fields = re.findall(r'pub (\w+): ([^,\n]+)', body)
-        structs.append({
-            'name':   name,
-            'fields': [{'name': n, 'type': t.strip().rstrip(',')} for n, t in fields]
-        })
+    structs=[]
+    for name,body in re.findall(r'pub struct (\w+) \{([^}]+)\}',content):
+        fields=re.findall(r'pub (\w+): ([^,\n]+)',body)
+        structs.append({'name':name,'fields':[{'name':n,'type':t.strip().rstrip(',')} for n,t in fields]})
     return structs
 
-
 def parse_enums(content):
-    enums = []
-    for name, body in re.findall(r'pub enum (\w+) \{([^}]+)\}', content):
-        variants = re.findall(r'\n\s+(\w+)', body)
-        enums.append({'name': name, 'variants': variants})
+    enums=[]
+    for name,body in re.findall(r'pub enum (\w+) \{([^}]+)\}',content):
+        variants=re.findall(r'\n\s+(\w+)',body)
+        enums.append({'name':name,'variants':variants})
     return enums
 
-
-# ── Code Example Generator ────────────────────────────────────────────────────
-
-def type_placeholder(t, name=''):
-    t = t.strip()
-    if t.startswith('Option<'):
-        return 'None'
-    if t in ('i64', 'i32', 'u64', 'u32'):
-        if any(k in name.lower() for k in ('chat', 'user', 'group')):
-            return '123456789i64'
+# ── Code Example Generator ──────────────────────────────────────────────────────
+def type_placeholder(t,name=''):
+    t=t.strip()
+    if t.startswith('Option<'): return 'None'
+    if t in ('i64','i32','u64','u32'):
+        if any(k in name.lower() for k in ('chat','user','group')): return '123456789i64'
         return '0i64'
-    if t == 'bool':    return 'true'
-    if t in ('f64', 'f32'): return '0.0'
-    if 'Into<String>' in t or t in ('String', '&str'):
-        if 'token'   in name.lower(): return '"YOUR_BOT_TOKEN"'
+    if t=='bool': return 'true'
+    if t in ('f64','f32'): return '0.0'
+    if 'Into<String>' in t or t in ('String','&str'):
+        if 'token' in name.lower(): return '"YOUR_BOT_TOKEN"'
         if any(k in name.lower() for k in ('text','message','caption')): return '"Hello from tgbotrs! 🦀"'
-        if 'url'     in name.lower(): return '"https://example.com"'
+        if 'url' in name.lower(): return '"https://example.com"'
         if 'chat_id' in name.lower(): return '"@yourchannel"'
-        if 'name'    in name.lower(): return '"my_name"'
+        if 'name' in name.lower(): return '"my_name"'
         return '"example"'
     if 'Into<ChatId>' in t: return '123456789i64'
-    if t.startswith('Vec<'):
-        inner = t[4:-1]
-        return f'vec![]  // Vec<{inner}>'
-    if t[0:1].isupper():
-        return f'{t}::default()'
+    if t.startswith('Vec<'): return f'vec![]  // Vec<{t[4:-1]}>'
+    if t[0:1].isupper(): return f'{t}::default()'
     return 'todo!()'
 
-
-def generate_example(method, params_map):
-    name       = method['name']
-    param_list = method['param_list']
-    has_opt    = name in params_map
-
-    imports = ['use tgbotrs::{Bot, BotError};']
+def generate_example(method,params_map):
+    name=method['name']; param_list=method['param_list']; has_opt=name in params_map
+    imports=['use tgbotrs::{Bot, BotError};']
     if has_opt:
-        s = params_map[name]['struct']
+        s=params_map[name]['struct']
         imports.append(f'use tgbotrs::gen_methods::{{{s}}};')
-
-    lines = imports + ['', '#[tokio::main]', 'async fn main() -> Result<(), BotError> {',
-                       '    let bot = Bot::new("YOUR_BOT_TOKEN").await?;', '']
-
-    call_args = []
+    lines=imports+['','#[tokio::main]','async fn main() -> Result<(), BotError> {',
+                   '    let bot = Bot::new("YOUR_BOT_TOKEN").await?;','']
+    call_args=[]
     for p in param_list:
-        pname, ptype = p['name'], p['type']
-        if pname == 'params' and has_opt:
-            pstruct = params_map[name]['struct']
-            fields  = params_map[name].get('fields', [])
+        pname,ptype=p['name'],p['type']
+        if pname=='params' and has_opt:
+            pstruct=params_map[name]['struct']; fields=params_map[name].get('fields',[])
             if fields:
-                chain = [f'    let params = {pstruct}::new()']
-                for f in fields[:3]:
-                    val = type_placeholder(f['type'], f['name'])
+                chain=[f'    let params = {pstruct}::new()']
+                for f in fields[:5]:
+                    val=type_placeholder(f['type'],f['name'])
                     chain.append(f'        .{f["name"]}({val})')
-                chain[-1] += ';'
-                lines.append('    // Optional parameters')
-                lines.extend(chain)
-            else:
-                lines.append(f'    let params = {pstruct}::new();')
-            lines.append('')
-            call_args.append('Some(params)')
+                if len(fields)>5: chain.append(f'        // ... +{len(fields)-5} more optional fields')
+                chain[-1]+=';'
+                lines.append('    // Optional parameters'); lines.extend(chain)
+            else: lines.append(f'    let params = {pstruct}::new();')
+            lines.append(''); call_args.append('Some(params)')
         else:
-            val = type_placeholder(ptype, pname)
-            lines.append(f'    let {pname} = {val};')
-            call_args.append(pname)
-
+            val=type_placeholder(ptype,pname)
+            lines.append(f'    let {pname} = {val};'); call_args.append(pname)
     lines.append('')
-    args_str = ',\n        '.join(call_args)
-    if call_args:
-        lines.append(f'    let result = bot.{name}(\n        {args_str}\n    ).await?;')
-    else:
-        lines.append(f'    let result = bot.{name}().await?;')
+    args_str=',\n        '.join(call_args)
+    if call_args: lines.append(f'    let result = bot.{name}(\n        {args_str}\n    ).await?;')
+    else: lines.append(f'    let result = bot.{name}().await?;')
+    lines+=['    println!("Result: {result:?}");','    Ok(())','}']; return '\n'.join(lines)
 
-    lines += ['    println!("Result: {result:?}");', '    Ok(())', '}']
-    return '\n'.join(lines)
-
-
-# ── Category Logic ────────────────────────────────────────────────────────────
-
-CATEGORY_ORDER = [
-    'Sending Messages', 'Getting Info', 'Editing', 'Deletion',
-    'Forwarding & Copying', 'Answering Queries', 'Chat Administration',
-    'Invite & Membership', 'Pinning', 'Configuration', 'Updates & Webhook',
-    'Stickers', 'Forum Topics', 'Games', 'Payments & Stars',
-    'Stories', 'Business', 'Other',
-]
+# ── Category Logic ──────────────────────────────────────────────────────────────
+CATEGORY_ORDER=['Sending Messages','Getting Info','Editing','Deletion','Forwarding & Copying',
+    'Answering Queries','Chat Administration','Invite & Membership','Pinning','Configuration',
+    'Updates & Webhook','Stickers','Forum Topics','Games','Payments & Stars','Stories','Business','Other']
 
 def categorize(name):
-    n = name.lower()
-    if n.startswith('send_'):               return 'Sending Messages'
-    if n.startswith('get_'):                return 'Getting Info'
-    if n.startswith('set_'):                return 'Configuration'
-    if n.startswith('edit_'):               return 'Editing'
-    if n.startswith('delete_'):             return 'Deletion'
-    if n.startswith(('forward_', 'copy_')): return 'Forwarding & Copying'
-    if n.startswith('answer_'):             return 'Answering Queries'
-    if n.startswith(('ban_', 'unban_', 'restrict_', 'promote_')): return 'Chat Administration'
-    if n.startswith(('create_', 'approve_', 'decline_', 'revoke_')): return 'Invite & Membership'
-    if n.startswith(('pin_', 'unpin_')):    return 'Pinning'
-    if 'sticker' in n or 'emoji' in n:     return 'Stickers'
-    if 'forum' in n:                        return 'Forum Topics'
-    if n in ('close', 'get_updates') or 'webhook' in n: return 'Updates & Webhook'
-    if 'game' in n:                         return 'Games'
-    if any(k in n for k in ('invoice', 'payment', 'shipping', 'star', 'gift', 'premium')): return 'Payments & Stars'
-    if 'story' in n:                        return 'Stories'
-    if 'business' in n:                     return 'Business'
+    n=name.lower()
+    if n.startswith('send_'): return 'Sending Messages'
+    if n.startswith('get_'): return 'Getting Info'
+    if n.startswith('set_'): return 'Configuration'
+    if n.startswith('edit_'): return 'Editing'
+    if n.startswith('delete_'): return 'Deletion'
+    if n.startswith(('forward_','copy_')): return 'Forwarding & Copying'
+    if n.startswith('answer_'): return 'Answering Queries'
+    if n.startswith(('ban_','unban_','restrict_','promote_')): return 'Chat Administration'
+    if n.startswith(('create_','approve_','decline_','revoke_')): return 'Invite & Membership'
+    if n.startswith(('pin_','unpin_')): return 'Pinning'
+    if 'sticker' in n or 'emoji' in n: return 'Stickers'
+    if 'forum' in n: return 'Forum Topics'
+    if n in ('close','get_updates') or 'webhook' in n: return 'Updates & Webhook'
+    if 'game' in n: return 'Games'
+    if any(k in n for k in ('invoice','payment','shipping','star','gift','premium')): return 'Payments & Stars'
+    if 'story' in n: return 'Stories'
+    if 'business' in n: return 'Business'
     return 'Other'
 
-
-# ── HTML Helpers ──────────────────────────────────────────────────────────────
-
 def h(s):
-    return (str(s)
-            .replace('&', '&amp;')
-            .replace('<', '&lt;')
-            .replace('>', '&gt;')
-            .replace('"', '&quot;'))
+    return (str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;'))
+def slug(name): return name.replace('_','-')
 
+def cat_icon(cat):
+    return {'Sending Messages':'📤','Getting Info':'ℹ️','Editing':'✏️','Deletion':'🗑️',
+        'Forwarding & Copying':'📋','Answering Queries':'💬','Chat Administration':'🛡️',
+        'Invite & Membership':'🤝','Pinning':'📌','Configuration':'⚙️','Updates & Webhook':'🔄',
+        'Stickers':'😸','Forum Topics':'🗂️','Games':'🎮','Payments & Stars':'💰',
+        'Stories':'📖','Business':'🏢','Other':'🔧'}.get(cat,'📌')
 
-def slug(name):
-    return name.replace('_', '-')
-
-
-# ── Build HTML Fragments ──────────────────────────────────────────────────────
-
-def build_method_cards(categories, params_map, examples):
-    html = ''
+# ── Build Method Cards ─────────────────────────────────────────────────────────
+def build_method_cards(categories,params_map,examples):
+    html=''
     for cat in CATEGORY_ORDER:
-        if cat not in categories:
-            continue
-        cat_id = cat.lower().replace(' ', '-').replace('&', 'and')
-        methods = categories[cat]
-        html += f'''
-    <section class="cat-section" id="cat-{cat_id}">
-      <div class="cat-header">
-        <h2 class="cat-title">{h(cat)}</h2>
-        <span class="cat-count">{len(methods)} methods</span>
-      </div>
-      <div class="methods-grid">
-'''
+        if cat not in categories: continue
+        cat_id=cat.lower().replace(' ','-').replace('&','and')
+        methods=categories[cat]
+        html+=f'\n    <section class="cat-section" id="cat-{cat_id}">\n      <div class="cat-header"><h2 class="cat-title">{h(cat)}</h2><span class="cat-count">{len(methods)}</span></div>\n      <div class="methods-grid">\n'
         for m in methods:
-            name = m['name']
-            s    = slug(name)
-            doc  = h(m['doc'][:160] + ('…' if len(m['doc']) > 160 else ''))
-            ret  = h(m['ret'])
-            has_opt = name in params_map
-
-            param_pills = ''.join(
-                f'<span class="param-pill {"optional" if "Option<" in p["type"] or p["name"]=="params" else "required"}" '
-                f'title="{h(p["type"])}">{h(p["name"])}</span>'
+            name=m['name']; s=slug(name); doc=h(m['doc']); ret=h(m['ret']); has_opt=name in params_map
+            param_pills=''.join(
+                f'<span class="param-pill {"optional" if "Option<" in p["type"] or p["name"]=="params" else "required"}" title="{h(p["type"])}">{h(p["name"])}</span>'
                 for p in m['param_list']
             ) or '<span class="no-params">no parameters</span>'
-
-            opt_html = ''
+            opt_html=''
             if has_opt:
-                fields = params_map[name].get('fields', [])
-                rows   = ''.join(
-                    f'<tr><td class="field-name">{h(f["name"])}</td>'
-                    f'<td class="field-type">{h(f["type"])}</td>'
-                    f'<td class="field-doc">{h(f.get("doc",""))}</td></tr>'
-                    for f in fields[:10]
+                fields=params_map[name].get('fields',[]); struct_name=params_map[name]['struct']
+                # ALL FIELDS — no truncation
+                rows=''.join(
+                    f'<tr><td class="field-name">{h(f["name"])}</td><td class="field-type">{h(f["type"])}</td><td class="field-doc">{h(f.get("doc",""))}</td></tr>'
+                    for f in fields
                 )
-                if len(fields) > 10:
-                    rows += f'<tr><td colspan="3" class="more-fields">+{len(fields)-10} more fields…</td></tr>'
-                struct_name = params_map[name]['struct']
-                opt_html = f'''
+                opt_html=f'''
             <div class="optional-section">
-              <div class="section-label">Optional params — <code>{h(struct_name)}</code></div>
-              <table class="fields-table">
-                <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-                <tbody>{rows}</tbody>
-              </table>
+              <div class="section-label">Optional params — <code>{h(struct_name)}</code><span class="field-count">{len(fields)} fields</span></div>
+              <div class="table-wrap"><table class="fields-table"><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>{rows}</tbody></table></div>
             </div>'''
-
-            code = h(examples.get(name, '// example not available'))
-
-            html += f'''
+            code=h(examples.get(name,'// example not available'))
+            html+=f'''
         <div class="method-card" id="method-{s}" data-name="{name}" data-cat="{h(cat)}">
-          <div class="method-header">
+          <div class="method-header" onclick="toggleCard(this)">
             <div class="method-name-row">
-              <a class="method-name" href="#method-{s}">bot.{name}()</a>
+              <span class="method-name">bot.{name}()</span>
               <div class="method-badges">
                 <span class="badge badge-async">async</span>
                 <span class="badge badge-ret">→ {ret}</span>
-                {'<span class="badge badge-opt">+optional</span>' if has_opt else ''}
+                {'<span class="badge badge-opt">+opts</span>' if has_opt else ''}
               </div>
+              <span class="card-toggle-arrow">▾</span>
             </div>
             <p class="method-doc">{doc}</p>
           </div>
-          <div class="method-body">
-            <div class="params-section">
-              <div class="section-label">Parameters</div>
-              <div class="param-pills">{param_pills}</div>
-            </div>
+          <div class="method-body collapsed-body">
+            <div class="params-section"><div class="section-label">Parameters</div><div class="param-pills">{param_pills}</div></div>
             {opt_html}
             <div class="example-section">
               <div class="example-header">
                 <div class="section-label">Example</div>
-                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <div class="example-actions">
+                  <a href="#method-{s}" class="anchor-btn" title="Link">🔗</a>
+                  <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
               </div>
               <pre class="code-block"><code class="language-rust">{code}</code></pre>
             </div>
-            <div class="method-footer">
-              <a href="{h(m["url"])}" target="_blank" class="tg-link">📖 Telegram Docs ↗</a>
-              <a href="#method-{s}" class="anchor-link">🔗 Direct link</a>
-            </div>
+            <div class="method-footer"><a href="{h(m["url"])}" target="_blank" class="tg-link">📖 Telegram Docs ↗</a></div>
           </div>
         </div>
 '''
-        html += '      </div>\n    </section>\n'
+        html+='      </div>\n    </section>\n'
     return html
 
-
 def build_sidebar(categories):
-    html = ''
+    html=''
     for cat in CATEGORY_ORDER:
-        if cat not in categories:
-            continue
-        cat_id = cat.lower().replace(' ', '-').replace('&', 'and')
-        methods = categories[cat]
-        html += f'''
+        if cat not in categories: continue
+        cat_id=cat.lower().replace(' ','-').replace('&','and'); methods=categories[cat]
+        html+=f'''
       <div class="sidebar-cat">
         <button class="cat-toggle" onclick="toggleCat(this)" data-cat-id="{cat_id}">
+          <span class="cat-icon">{cat_icon(cat)}</span>
           <span class="cat-name">{h(cat)}</span>
           <span class="cat-cnt">{len(methods)}</span>
           <span class="cat-arrow">▾</span>
@@ -389,342 +276,354 @@ def build_sidebar(categories):
         <div class="cat-methods collapsed" id="sidebar-{cat_id}">
 '''
         for m in methods:
-            s = slug(m['name'])
-            html += f'          <a href="#method-{s}" class="sidebar-method">{h(m["name"])}</a>\n'
-        html += '        </div>\n      </div>\n'
+            s=slug(m['name'])
+            html+=f'          <a href="#method-{s}" class="sidebar-method" onclick="closeSidebar()">{h(m["name"])}</a>\n'
+        html+='        </div>\n      </div>\n'
     return html
-
 
 def build_types_html(types_list):
-    html = ''
-    for t in types_list[:60]:
-        name = h(t['name'])
-        fields = ''.join(
-            f'<div class="type-field">'
-            f'<span class="type-field-name">{h(f["name"])}</span>'
-            f'<span class="type-field-type">{h(f["type"])}</span>'
-            f'</div>'
-            for f in t['fields'][:6]
-        )
-        if len(t['fields']) > 6:
-            fields += f'<div class="type-more">+{len(t["fields"])-6} more…</div>'
-        html += f'''
-    <div class="type-card" id="type-{name.lower()}">
-      <div class="type-name">{name}</div>
-      <div class="type-fields">{fields}</div>
-    </div>
-'''
+    html=''
+    for t in types_list:
+        name=h(t['name'])
+        # ALL fields
+        fields_html=''.join(
+            f'<div class="type-field"><span class="type-field-name">{h(f["name"])}</span><span class="type-field-type">{h(f["type"])}</span></div>'
+            for f in t['fields']
+        ) or '<div class="type-empty">no public fields</div>'
+        count=len(t['fields'])
+        html+=f'\n    <div class="type-card" id="type-{name.lower()}"><div class="type-name">{name} <span class="type-field-count">{count}</span></div><div class="type-fields">{fields_html}</div></div>\n'
     return html
-
 
 def build_enums_html(enums_list):
-    html = ''
+    html=''
     for e in enums_list:
-        name = h(e['name'])
-        variants = ' '.join(
-            f'<span class="enum-variant">{h(v)}</span>'
-            for v in e['variants'][:12]
-        )
-        html += f'''
-    <div class="enum-card" id="enum-{name.lower()}">
-      <div class="enum-name">{name}</div>
-      <div class="enum-variants">{variants}</div>
-    </div>
-'''
+        name=h(e['name'])
+        variants=' '.join(f'<span class="enum-variant">{h(v)}</span>' for v in e['variants'])
+        html+=f'\n    <div class="enum-card" id="enum-{name.lower()}"><div class="enum-name">{name}</div><div class="enum-variants">{variants}</div></div>\n'
     return html
 
-
-# ── Main Generation ───────────────────────────────────────────────────────────
-
+# ── Main ────────────────────────────────────────────────────────────────────────
 print("\n🔍 Parsing methods...")
-methods = parse_methods(gen_methods)
+methods=parse_methods(gen_methods)
 print(f"   Found {len(methods)} methods")
 
 print("🔍 Parsing param structs...")
-params_map = parse_param_structs(gen_methods)
+params_map=parse_param_structs(gen_methods)
 print(f"   Found {len(params_map)} optional param structs")
 
 print("🔍 Parsing types...")
-types_structs = parse_structs(gen_types)
-types_enums   = parse_enums(gen_types)
-hand_structs  = parse_structs(hand_types)
-hand_enums    = parse_enums(hand_types)
-all_structs   = types_structs + hand_structs
-all_enums     = types_enums + hand_enums
+types_structs=parse_structs(gen_types); types_enums=parse_enums(gen_types)
+hand_structs=parse_structs(hand_types); hand_enums=parse_enums(hand_types)
+all_structs=types_structs+hand_structs; all_enums=types_enums+hand_enums
 print(f"   Found {len(all_structs)} structs, {len(all_enums)} enums")
 
 print("🔧 Generating code examples...")
-examples = {m['name']: generate_example(m, params_map) for m in methods}
+examples={m['name']:generate_example(m,params_map) for m in methods}
 print(f"   Generated {len(examples)} examples")
 
 print("📂 Categorizing methods...")
-categories: dict = {}
+categories={}
 for m in methods:
-    cat = categorize(m['name'])
-    categories.setdefault(cat, []).append(m)
-for cat, ms in sorted(categories.items(), key=lambda x: len(x[1]), reverse=True):
+    cat=categorize(m['name']); categories.setdefault(cat,[]).append(m)
+for cat,ms in sorted(categories.items(),key=lambda x:len(x[1]),reverse=True):
     print(f"   {cat}: {len(ms)}")
 
 print("\n🏗️  Building HTML fragments...")
-method_cards = build_method_cards(categories, params_map, examples)
-sidebar_html = build_sidebar(categories)
-types_html   = build_types_html(all_structs)
-enums_html   = build_enums_html(all_enums)
+method_cards=build_method_cards(categories,params_map,examples)
+sidebar_html=build_sidebar(categories)
+types_html=build_types_html(all_structs)
+enums_html=build_enums_html(all_enums)
+stats={'methods':len(methods),'types':len(all_structs),'enums':len(all_enums),'param_structs':len(params_map)}
 
-stats = {
-    'methods': len(methods),
-    'types':   len(all_structs),
-    'enums':   len(all_enums),
-    'param_structs': len(params_map),
-}
+# search index
+_cat_colors={'Sending Messages':'#818cf8','Getting Info':'#38bdf8','Configuration':'#34d399',
+    'Editing':'#fbbf24','Deletion':'#f87171','Forwarding & Copying':'#a78bfa',
+    'Answering Queries':'#2dd4bf','Chat Administration':'#fb923c','Invite & Membership':'#c084fc',
+    'Pinning':'#f472b6','Stickers':'#a3e635','Forum Topics':'#67e8f9','Updates & Webhook':'#818cf8',
+    'Games':'#4ade80','Payments & Stars':'#fcd34d','Stories':'#fb7185','Business':'#94a3b8','Other':'#6b7280'}
+_search_idx=[{'n':m['name'],'d':m['doc'][:100],'c':categorize(m['name']),'col':_cat_colors.get(categorize(m['name']),'#7c6af7')} for m in methods]
+_search_json=json.dumps(_search_idx,separators=(',',':'))
 
-# ── Assemble Full Page ────────────────────────────────────────────────────────
+S=stats
 
-def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
-    S = stats
-    return f'''<!DOCTYPE html>
+# ── Assemble ────────────────────────────────────────────────────────────────────
+HTML = f'''<!DOCTYPE html>
 <html lang="en" data-theme="amoled">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>tgbotrs — Telegram Bot API for Rust</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+  <title>tgbotrs v{CRATE_VERSION} — Telegram Bot API for Rust</title>
   <meta name="description" content="Complete docs for tgbotrs — {S["methods"]} methods, {S["types"]} types, fully async. By Ankit Chaubey.">
-  <meta property="og:title" content="tgbotrs — Rust Telegram Bot Library">
-  <meta property="og:url" content="https://tgbotrs.ankitchaubey.in">
-  <link rel="canonical" href="https://tgbotrs.ankitchaubey.in">
+  <meta property="og:url" content="https://{CUSTOM_DOMAIN}">
+  <link rel="canonical" href="https://{CUSTOM_DOMAIN}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-  <style>
-    [data-theme="amoled"]{{
-      --bg:#000;--bg2:#0c0c0c;--bg3:#141414;--bg4:#1c1c1c;
-      --border:#1e1e1e;--border-bright:#2e2e2e;
-      --accent:#8b78ff;--accent-h:#a090ff;--accent2:#38bdf8;--accent3:#4ade80;--accent4:#f87171;
-      --text:#f0f0f0;--text-dim:#888;--text-muted:#444;
-      --rust:#fb923c;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;
-      --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
-      --code-bg:#111;--hdr-bg:rgba(0,0,0,.9);
-    }}
-    [data-theme="dark"]{{
-      --bg:#0d0f17;--bg2:#131622;--bg3:#1a1d2e;--bg4:#21253a;
-      --border:#2a2f47;--border-bright:#3d4468;
-      --accent:#7c6af7;--accent-h:#9585ff;--accent2:#38bdf8;--accent3:#34d399;--accent4:#f87171;
-      --text:#e2e8f0;--text-dim:#94a3b8;--text-muted:#64748b;
-      --rust:#f97316;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;
-      --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
-      --code-bg:#1a1d2e;--hdr-bg:rgba(13,15,23,.9);
-    }}
-    [data-theme="light"]{{
-      --bg:#f5f6fa;--bg2:#fff;--bg3:#f0f1f7;--bg4:#e8eaf2;
-      --border:#e0e3ef;--border-bright:#c8cde0;
-      --accent:#5b4fe8;--accent-h:#7466ef;--accent2:#0284c7;--accent3:#16a34a;--accent4:#dc2626;
-      --text:#0e1117;--text-dim:#4a5568;--text-muted:#9ca3af;
-      --rust:#ea580c;--yellow:#d97706;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--purple:#7c3aed;
-      --sidebar-w:280px;--header-h:64px;--radius:12px;--radius-sm:8px;
-      --code-bg:#1e1e2e;--hdr-bg:rgba(245,246,250,.92);
-    }}
-    *{{margin:0;padding:0;box-sizing:border-box}}
-    html{{scroll-behavior:smooth}}
-    body{{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}}
-    ::-webkit-scrollbar{{width:6px;height:6px}}
-    ::-webkit-scrollbar-track{{background:var(--bg2)}}
-    ::-webkit-scrollbar-thumb{{background:var(--border-bright);border-radius:3px}}
-    ::-webkit-scrollbar-thumb:hover{{background:var(--accent)}}
+<style>
+/* THEMES */
+[data-theme="amoled"]{{--bg:#000;--bg2:#0a0a0a;--bg3:#111;--bg4:#1a1a1a;--border:rgba(255,255,255,.07);--border-bright:rgba(255,255,255,.14);--accent:#8b78ff;--accent-h:#a090ff;--accent2:#38bdf8;--accent3:#4ade80;--accent4:#f87171;--text:#f0f0f0;--text-dim:#aaa;--text-muted:#555;--rust:#fb923c;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;--glass:rgba(255,255,255,.04);--glass-b:rgba(255,255,255,.09);--glass-h:rgba(255,255,255,.07);--hdr:rgba(0,0,0,.88);--code-bg:#0d0d0d;--sb-bg:rgba(6,6,6,.98);--ga:rgba(139,120,255,.14);--gb:rgba(56,189,248,.09);}}
+[data-theme="dark"]{{--bg:#0d0f17;--bg2:#131622;--bg3:#1a1d2e;--bg4:#21253a;--border:rgba(255,255,255,.08);--border-bright:rgba(255,255,255,.15);--accent:#7c6af7;--accent-h:#9585ff;--accent2:#38bdf8;--accent3:#34d399;--accent4:#f87171;--text:#e2e8f0;--text-dim:#94a3b8;--text-muted:#64748b;--rust:#f97316;--yellow:#fbbf24;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--purple:#c084fc;--glass:rgba(255,255,255,.05);--glass-b:rgba(255,255,255,.1);--glass-h:rgba(255,255,255,.08);--hdr:rgba(13,15,23,.9);--code-bg:#1a1d2e;--sb-bg:rgba(10,12,20,.98);--ga:rgba(124,106,247,.18);--gb:rgba(56,189,248,.12);}}
+[data-theme="light"]{{--bg:#f0f2fc;--bg2:#fff;--bg3:#edf0fb;--bg4:#e3e6f5;--border:rgba(0,0,0,.07);--border-bright:rgba(0,0,0,.13);--accent:#5b4fe8;--accent-h:#7466ef;--accent2:#0284c7;--accent3:#16a34a;--accent4:#dc2626;--text:#0e1117;--text-dim:#4a5568;--text-muted:#9ca3af;--rust:#ea580c;--yellow:#d97706;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--purple:#7c3aed;--glass:rgba(255,255,255,.65);--glass-b:rgba(0,0,0,.08);--glass-h:rgba(255,255,255,.85);--hdr:rgba(240,242,252,.92);--code-bg:#1e1e2e;--sb-bg:rgba(255,255,255,.98);--ga:rgba(91,79,232,.11);--gb:rgba(2,132,199,.07);}}
 
-    .top-header{{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--header-h);background:var(--hdr-bg,rgba(13,15,23,.92));backdrop-filter:blur(20px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:24px;overflow:visible}}
-    .logo{{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}}
-    .logo-icon{{width:38px;height:38px;background:linear-gradient(135deg,var(--accent),#e879f9);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;box-shadow:0 2px 12px rgba(124,106,247,.4)}}
-    .logo-text{{font-size:18px;font-weight:800;color:var(--text)}}
-    .logo-version{{font-size:11px;color:var(--accent);background:rgba(124,106,247,.12);padding:2px 7px;border-radius:100px;font-weight:600}}
-    .header-search{{flex:1;max-width:440px;position:relative}}
-    .header-search input{{width:100%;padding:8px 16px 8px 40px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .2s,box-shadow .2s;outline:none}}
-    .header-search input:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,106,247,.12)}}
-    .header-search input::placeholder{{color:var(--text-muted)}}
-    .search-icon{{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:14px}}
-    .header-nav{{display:flex;align-items:center;gap:4px;margin-left:auto}}
-    .header-nav a{{padding:6px 12px;border-radius:var(--radius-sm);color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s,background .2s;white-space:nowrap}}
-    .header-nav a:hover{{color:var(--text);background:var(--bg3)}}
-    .header-nav .btn-gh{{background:var(--accent);color:#fff;padding:6px 14px}}
-    .header-nav .btn-gh:hover{{background:var(--accent-h)}}
-    .layout{{display:flex;padding-top:var(--header-h);min-height:100vh}}
-    .sidebar{{position:fixed;top:var(--header-h);bottom:0;left:0;width:var(--sidebar-w);overflow-y:auto;background:var(--bg2);border-right:1px solid var(--border);padding:16px 0 40px}}
-    .sidebar-section-title{{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);padding:12px 18px 6px}}
-    .sidebar-link{{display:flex;align-items:center;gap:8px;padding:7px 18px;color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:500;transition:color .15s,background .15s}}
-    .sidebar-link:hover,.sidebar-link.active{{color:var(--text);background:var(--bg3)}}
-    .sidebar-link .dot{{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.6;flex-shrink:0}}
-    .sidebar-divider{{height:1px;background:var(--border);margin:12px 0}}
-    .cat-toggle{{width:100%;display:flex;align-items:center;padding:7px 18px;background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:12px;font-weight:600;font-family:inherit;transition:color .15s,background .15s;letter-spacing:.02em}}
-    .cat-toggle:hover{{color:var(--text);background:var(--bg3)}}
-    .cat-name{{flex:1;text-align:left}}
-    .cat-cnt{{font-size:10px;background:var(--bg4);color:var(--text-muted);padding:1px 6px;border-radius:100px;margin-right:6px}}
-    .cat-arrow{{transition:transform .2s;font-size:11px}}
-    .cat-toggle.open .cat-arrow{{transform:rotate(180deg)}}
-    .cat-methods{{overflow:hidden;transition:max-height .25s ease;max-height:2000px}}
-    .cat-methods.collapsed{{max-height:0}}
-    .sidebar-method{{display:block;padding:4px 18px 4px 32px;color:var(--text-muted);text-decoration:none;font-size:12px;font-family:'JetBrains Mono',monospace;transition:color .15s,background .15s}}
-    .sidebar-method:hover{{color:var(--accent);background:var(--bg3)}}
-    .main{{margin-left:var(--sidebar-w);flex:1;min-width:0}}
-    .hero{{background:linear-gradient(135deg,#0d0f17,#131622 50%,#1a1020);border-bottom:1px solid var(--border);padding:64px 48px;position:relative;overflow:hidden}}
-    .hero::before{{content:'';position:absolute;top:-60px;right:-60px;width:400px;height:400px;background:radial-gradient(circle,rgba(124,106,247,.12),transparent 70%);pointer-events:none}}
-    .hero::after{{content:'';position:absolute;bottom:-80px;left:100px;width:300px;height:300px;background:radial-gradient(circle,rgba(56,189,248,.08),transparent 70%);pointer-events:none}}
-    .hero-content{{position:relative;z-index:1;max-width:780px}}
-    .hero-badge{{display:inline-flex;align-items:center;gap:6px;background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.25);color:var(--accent);padding:4px 12px;border-radius:100px;font-size:12px;font-weight:600;margin-bottom:20px}}
-    .hero h1{{font-size:52px;font-weight:900;line-height:1.1;letter-spacing:-.03em;margin-bottom:16px}}
-    .hero h1 .grad{{background:linear-gradient(135deg,var(--accent),#e879f9,var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}}
-    .hero-desc{{font-size:17px;color:var(--text-dim);margin-bottom:32px;max-width:600px;line-height:1.7}}
-    .hero-stats{{display:flex;gap:32px;flex-wrap:wrap;margin-bottom:36px}}
-    .stat-item{{display:flex;flex-direction:column;gap:2px}}
-    .stat-num{{font-size:28px;font-weight:800;color:var(--text)}}
-    .stat-label{{font-size:12px;color:var(--text-muted);font-weight:500;letter-spacing:.04em}}
-    .hero-btns{{display:flex;gap:12px;flex-wrap:wrap}}
-    .btn{{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;text-decoration:none;transition:all .2s;cursor:pointer;border:none;font-family:inherit}}
-    .btn-filled{{background:var(--accent);color:#fff;box-shadow:0 4px 16px rgba(124,106,247,.3)}}
-    .btn-filled:hover{{background:var(--accent-h);transform:translateY(-1px);box-shadow:0 8px 24px rgba(124,106,247,.4)}}
-    .btn-outline{{background:transparent;border:1px solid var(--border-bright);color:var(--text-dim)}}
-    .btn-outline:hover{{border-color:var(--accent);color:var(--accent);background:rgba(124,106,247,.06)}}
-    .section{{padding:48px;border-bottom:1px solid var(--border)}}
-    .section-h2{{font-size:26px;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:10px}}
-    .section-sub{{color:var(--text-dim);font-size:14px;margin-bottom:28px}}
-    .install-grid{{display:grid;grid-template-columns:1fr 1fr;gap:20px}}
-    .install-card{{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px;overflow:hidden}}
-    .install-card-title{{font-size:13px;font-weight:700;color:var(--text-dim);margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em}}
-    .features-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}}
-    .feature-card{{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .2s,transform .2s}}
-    .feature-card:hover{{border-color:var(--accent);transform:translateY(-2px)}}
-    .feature-icon{{font-size:28px;margin-bottom:10px}}
-    .feature-title{{font-size:15px;font-weight:700;margin-bottom:6px}}
-    .feature-desc{{font-size:13px;color:var(--text-dim);line-height:1.6}}
-    .filter-bar{{padding:20px 48px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:var(--header-h);z-index:50}}
-    .filter-label{{font-size:12px;color:var(--text-muted);font-weight:600}}
-    .filter-chip{{padding:5px 12px;border-radius:100px;background:var(--bg3);border:1px solid var(--border);color:var(--text-dim);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}}
-    .filter-chip:hover,.filter-chip.active{{background:var(--accent);color:#fff;border-color:var(--accent)}}
-    .results-count{{margin-left:auto;font-size:12px;color:var(--text-muted)}}
-    .cat-section{{padding:0 48px 40px}}
-    .cat-header{{display:flex;align-items:baseline;gap:12px;padding:40px 0 20px;border-bottom:1px solid var(--border);margin-bottom:24px}}
-    .cat-title{{font-size:20px;font-weight:800}}
-    .cat-count{{font-size:12px;background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:100px;color:var(--text-muted)}}
-    .methods-grid{{display:flex;flex-direction:column;gap:16px}}
-    .method-card{{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .2s,box-shadow .2s;scroll-margin-top:calc(var(--header-h) + 60px)}}
-    .method-card:hover{{border-color:var(--border-bright);box-shadow:0 2px 16px rgba(0,0,0,.3)}}
-    .method-card:target{{border-color:var(--accent);box-shadow:0 0 0 2px rgba(124,106,247,.15)}}
-    .method-header{{padding:18px 22px 14px;border-bottom:1px solid var(--border)}}
-    .method-name-row{{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:6px}}
-    .method-name{{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--accent);text-decoration:none}}
-    .method-name:hover{{color:var(--accent-h);text-decoration:underline}}
-    .method-badges{{display:flex;gap:6px;align-items:center;flex-wrap:wrap}}
-    .badge{{font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;letter-spacing:.04em}}
-    .badge-async{{background:rgba(56,189,248,.12);color:var(--accent2);border:1px solid rgba(56,189,248,.2)}}
-    .badge-ret{{background:rgba(52,211,153,.1);color:var(--accent3);border:1px solid rgba(52,211,153,.2);font-family:'JetBrains Mono',monospace}}
-    .badge-opt{{background:rgba(251,191,36,.1);color:var(--yellow);border:1px solid rgba(251,191,36,.2)}}
-    .method-doc{{font-size:13px;color:var(--text-dim);line-height:1.6;max-width:700px}}
-    .method-body{{padding:0}}
-    .params-section{{padding:14px 22px;border-bottom:1px solid var(--border)}}
-    .optional-section{{padding:14px 22px;border-bottom:1px solid var(--border);overflow-x:auto}}
-    .example-section{{padding:14px 22px;border-bottom:1px solid var(--border)}}
-    .section-label{{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px}}
-    .param-pills{{display:flex;flex-wrap:wrap;gap:6px}}
-    .param-pill{{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 9px;border-radius:6px;cursor:help}}
-    .param-pill.required{{background:rgba(124,106,247,.12);color:var(--accent);border:1px solid rgba(124,106,247,.2)}}
-    .param-pill.optional{{background:rgba(100,116,139,.08);color:var(--text-muted);border:1px solid var(--border)}}
-    .no-params{{font-size:12px;color:var(--text-muted);font-style:italic}}
-    .fields-table{{width:100%;border-collapse:collapse;font-size:12px}}
-    .fields-table th{{text-align:left;padding:6px 10px;background:var(--bg3);color:var(--text-muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)}}
-    .fields-table td{{padding:5px 10px;vertical-align:top;border-bottom:1px solid rgba(42,47,71,.5)}}
-    .field-name{{font-family:'JetBrains Mono',monospace;color:var(--accent3);font-size:11px;white-space:nowrap}}
-    .field-type{{font-family:'JetBrains Mono',monospace;color:var(--blue);font-size:11px}}
-    .field-doc{{color:var(--text-muted);line-height:1.5}}
-    .more-fields{{color:var(--text-muted);font-style:italic;padding:4px 10px}}
-    .example-header{{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}}
-    .copy-btn{{font-size:11px;padding:4px 10px;border-radius:6px;background:var(--bg4);border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-family:inherit;transition:all .15s}}
-    .copy-btn:hover{{background:var(--accent);color:#fff;border-color:var(--accent)}}
-    .copy-btn.copied{{background:var(--green);color:#000;border-color:var(--green)}}
-    .code-block{{background:#1a1b2e!important;border-radius:var(--radius-sm);overflow:auto;font-size:12.5px;line-height:1.6;border:1px solid var(--border);margin:0}}
-    .code-block code{{padding:14px 18px;display:block;font-family:'JetBrains Mono',monospace}}
-    .method-footer{{padding:10px 22px;display:flex;gap:16px;align-items:center}}
-    .tg-link,.anchor-link{{font-size:12px;color:var(--text-muted);text-decoration:none;transition:color .15s}}
-    .tg-link:hover{{color:var(--accent2)}}
-    .anchor-link:hover{{color:var(--accent)}}
-    .types-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}}
-    .type-card{{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;transition:border-color .15s;scroll-margin-top:calc(var(--header-h) + 60px)}}
-    .type-card:hover{{border-color:var(--border-bright)}}
-    .type-name{{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--purple);margin-bottom:8px}}
-    .type-field{{display:flex;justify-content:space-between;gap:8px;padding:2px 0}}
-    .type-field-name{{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3)}}
-    .type-field-type{{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);opacity:.8}}
-    .type-more{{font-size:11px;color:var(--text-muted);font-style:italic;padding-top:4px}}
-    .enums-grid{{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}}
-    .enum-card{{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px}}
-    .enum-name{{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--yellow);margin-bottom:8px}}
-    .enum-variants{{display:flex;flex-wrap:wrap;gap:4px}}
-    .enum-variant{{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.15);color:var(--yellow);padding:1px 7px;border-radius:4px}}
-    .error-section{{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:16px}}
-    .error-variant{{margin-bottom:20px}}
-    .error-variant-name{{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--red);margin-bottom:4px}}
-    .error-variant-desc{{font-size:13px;color:var(--text-dim)}}
-    .tabs{{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:24px}}
-    .tab{{padding:10px 20px;border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-muted);background:none;border:none;font-family:inherit;border-bottom:2px solid transparent;transition:all .15s}}
-    .tab:hover{{color:var(--text)}}
-    .tab.active{{color:var(--accent);border-bottom-color:var(--accent)}}
-    .tab-panel{{display:none}}
-    .tab-panel.active{{display:block}}
-    .method-card.hidden{{display:none}}
-    .hljs{{background:transparent!important}}
-    body{{background:var(--bg);color:var(--text);transition:background .2s,color .2s}}
-    .theme-switcher{{display:flex;gap:2px;background:var(--bg3);border:1px solid var(--border-bright);border-radius:8px;padding:2px;flex-shrink:0}}
-    .th-btn{{padding:4px 9px;border-radius:6px;border:none;background:transparent;color:var(--text-muted);font-size:13px;cursor:pointer;font-family:inherit;transition:all .15s;line-height:1}}
-    .th-btn:hover{{color:var(--text)}}
-    .th-btn.on{{background:var(--accent);color:#fff;box-shadow:0 1px 6px rgba(124,106,247,.3)}}
-    .search-drop{{position:fixed;background:var(--bg2);border:1px solid var(--border-bright);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.6);z-index:99999;display:none;overflow:hidden;min-width:440px}}
-    .search-drop.open{{display:block}}
-    .sd-head{{padding:8px 14px 5px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);background:var(--bg3);border-bottom:1px solid var(--border)}}
-    .sd-list{{max-height:360px;overflow-y:auto}}
-    .sd-row{{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border)}}
-    .sd-row:last-child{{border-bottom:none}}
-    .sd-row:hover,.sd-row.focus{{background:var(--bg3)}}
-    .sd-dot{{width:7px;height:7px;border-radius:50%;flex-shrink:0}}
-    .sd-name{{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);flex-shrink:0;min-width:0}}
-    .sd-name mark{{background:rgba(139,120,255,.2);color:var(--accent);border-radius:2px;padding:0 1px;font-style:normal;font-weight:700}}
-    .sd-doc{{font-size:11px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-    .sd-cat{{font-size:10px;color:var(--text-muted);background:var(--bg4);padding:1px 6px;border-radius:4px;flex-shrink:0}}
-    .sd-empty{{padding:20px;text-align:center;color:var(--text-muted);font-size:13px}}
-    .sd-footer{{padding:6px 14px;font-size:10px;color:var(--text-muted);background:var(--bg3);border-top:1px solid var(--border);display:flex;justify-content:space-between}}
-    .sd-footer kbd{{background:var(--bg4);border:1px solid var(--border-bright);border-radius:3px;padding:0 4px;font-family:'JetBrains Mono',monospace;font-size:9px}}
-    [data-theme="light"] pre code{{color:#cdd6f4}}
-    .footer{{margin-left:var(--sidebar-w);padding:40px 48px;border-top:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}}
-    .footer-links{{display:flex;gap:20px}}
-    .footer-links a{{font-size:13px;color:var(--text-muted);text-decoration:none}}
-    .footer-links a:hover{{color:var(--accent)}}
-    @media(max-width:900px){{
-      :root{{--sidebar-w:0px}}
-      .sidebar,.header-nav{{display:none}}
-      .footer{{margin-left:0}}
-      .hero{{padding:40px 24px}}
-      .hero h1{{font-size:36px}}
-      .section{{padding:32px 24px}}
-      .filter-bar{{padding:16px 24px}}
-      .cat-section{{padding:0 24px 32px}}
-      .install-grid,.features-grid{{grid-template-columns:1fr}}
-    }}
-  </style>
+/* RESET */
+*{{margin:0;padding:0;box-sizing:border-box}}
+html{{scroll-behavior:smooth;-webkit-text-size-adjust:100%}}
+body{{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;-webkit-tap-highlight-color:transparent;transition:background .25s,color .25s}}
+a{{color:inherit;text-decoration:none}}
+button{{cursor:pointer;border:none;background:none;font-family:inherit;color:inherit}}
+::-webkit-scrollbar{{width:5px;height:5px}}::-webkit-scrollbar-track{{background:var(--bg2)}}::-webkit-scrollbar-thumb{{background:var(--border-bright);border-radius:3px}}
+
+/* LAYOUT */
+:root{{--hdr-h:64px;--sb-w:272px;--r:14px;--rs:9px;--mob-h:60px}}
+@media(max-width:768px){{:root{{--hdr-h:56px;--sb-w:288px}}}}
+
+/* GLASS */
+.glass{{background:var(--glass);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border:1px solid var(--glass-b)}}
+
+/* HEADER */
+.hdr{{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--hdr-h);background:var(--hdr);backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);border-bottom:1px solid var(--glass-b);display:flex;align-items:center;padding:0 16px 0 20px;gap:12px}}
+.logo{{display:flex;align-items:center;gap:9px;flex-shrink:0}}
+.logo-icon{{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),#e879f9);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;box-shadow:0 2px 14px rgba(139,120,255,.4);flex-shrink:0}}
+.logo-text{{font-size:17px;font-weight:800}}
+.logo-ver{{font-size:10px;color:var(--accent);background:rgba(139,120,255,.14);padding:2px 7px;border-radius:100px;font-weight:700;border:1px solid rgba(139,120,255,.25)}}
+.hdr-search{{flex:1;max-width:420px;position:relative}}
+.hdr-search input{{width:100%;padding:8px 36px 8px 36px;background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}}
+.hdr-search input:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,120,255,.15)}}
+.hdr-search input::placeholder{{color:var(--text-muted)}}
+.s-ico{{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text-muted);pointer-events:none}}
+.s-kbd{{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--text-muted);background:var(--bg4);border:1px solid var(--border-bright);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;pointer-events:none}}
+@media(max-width:480px){{.s-kbd{{display:none}}}}
+.hdr-nav{{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0}}
+.hdr-nav a{{padding:6px 10px;border-radius:var(--rs);color:var(--text-dim);font-size:13px;font-weight:500;transition:all .15s;white-space:nowrap}}
+.hdr-nav a:hover{{color:var(--text);background:var(--glass)}}
+.btn-gh{{background:var(--accent)!important;color:#fff!important;padding:7px 13px!important;border-radius:var(--rs)!important;font-weight:600!important}}
+.btn-gh:hover{{background:var(--accent-h)!important}}
+@media(max-width:640px){{.nav-hide{{display:none}}}}
+.theme-sw{{display:flex;gap:1px;background:var(--glass);border:1px solid var(--glass-b);border-radius:9px;padding:2px;flex-shrink:0}}
+.th-btn{{padding:5px 8px;border-radius:7px;font-size:14px;transition:all .15s;line-height:1;color:var(--text-muted)}}
+.th-btn:hover{{color:var(--text)}}
+.th-btn.on{{background:var(--accent);color:#fff;box-shadow:0 1px 8px rgba(139,120,255,.4)}}
+@media(max-width:480px){{.theme-sw{{display:none}}}}
+.mob-menu-btn{{display:none;padding:8px;border-radius:9px;background:var(--glass);border:1px solid var(--glass-b);font-size:18px;flex-shrink:0;align-items:center;justify-content:center}}
+@media(max-width:900px){{.mob-menu-btn{{display:flex}}}}
+
+/* SIDEBAR */
+.sidebar{{position:fixed;top:var(--hdr-h);bottom:0;left:0;width:var(--sb-w);overflow-y:auto;background:var(--sb-bg);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-right:1px solid var(--glass-b);padding:10px 0 env(safe-area-inset-bottom,0);z-index:150;transition:transform .28s cubic-bezier(.4,0,.2,1)}}
+@media(max-width:900px){{.sidebar{{top:0;bottom:0;padding-top:calc(var(--hdr-h) + 8px);padding-bottom:env(safe-area-inset-bottom,16px);transform:translateX(-100%);box-shadow:4px 0 40px rgba(0,0,0,.5)}}.sidebar.open{{transform:translateX(0)}}}}
+.sb-overlay{{display:none;position:fixed;inset:0;z-index:140;background:rgba(0,0,0,.6);backdrop-filter:blur(2px)}}
+.sb-overlay.open{{display:block}}
+.sb-search{{padding:8px 12px 4px}}
+.sb-search input{{width:100%;padding:7px 12px;background:var(--glass);border:1px solid var(--glass-b);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s}}
+.sb-search input:focus{{border-color:var(--accent)}}
+.sb-search input::placeholder{{color:var(--text-muted)}}
+.sb-ttl{{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);padding:10px 16px 4px}}
+.sb-link{{display:flex;align-items:center;gap:7px;padding:7px 16px;color:var(--text-dim);font-size:13px;font-weight:500;transition:all .15s}}
+.sb-link:hover,.sb-link.active{{color:var(--text);background:var(--glass)}}
+.sb-link .dot{{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.5;flex-shrink:0}}
+.sb-div{{height:1px;background:var(--glass-b);margin:8px 12px}}
+.cat-toggle{{width:100%;display:flex;align-items:center;gap:6px;padding:7px 16px;background:none;color:var(--text-dim);font-size:12px;font-weight:600;font-family:inherit;letter-spacing:.02em;transition:all .15s}}
+.cat-toggle:hover{{color:var(--text);background:var(--glass)}}
+.cat-icon{{font-size:13px;flex-shrink:0}}.cat-name{{flex:1;text-align:left}}
+.cat-cnt{{font-size:10px;background:var(--glass);color:var(--text-muted);padding:1px 6px;border-radius:100px;border:1px solid var(--glass-b)}}
+.cat-arrow{{transition:transform .2s;font-size:10px}}.cat-toggle.open .cat-arrow{{transform:rotate(180deg)}}
+.cat-methods{{overflow:hidden;max-height:3000px;transition:max-height .3s ease}}.cat-methods.collapsed{{max-height:0}}
+.sidebar-method{{display:block;padding:4px 16px 4px 36px;color:var(--text-muted);font-size:11.5px;font-family:'JetBrains Mono',monospace;transition:all .12s}}
+.sidebar-method:hover{{color:var(--accent);background:var(--glass)}}.sidebar-method.active{{color:var(--accent);font-weight:600}}
+
+/* MOBILE BOTTOM NAV */
+.mob-bnav{{display:none;position:fixed;bottom:0;left:0;right:0;z-index:180;background:var(--sb-bg);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid var(--glass-b);padding:8px 0 env(safe-area-inset-bottom,4px);height:var(--mob-h)}}
+@media(max-width:900px){{.mob-bnav{{display:flex}}}}
+.mob-nb{{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9.5px;font-weight:600;color:var(--text-muted);padding:4px 0;letter-spacing:.03em;transition:color .15s}}
+.mob-nb:hover,.mob-nb.active{{color:var(--accent)}}
+.mob-nb .ni{{font-size:18px}}
+
+/* MOBILE THEME FAB */
+.mob-fab{{display:none;position:fixed;bottom:calc(var(--mob-h) + 12px);right:16px;z-index:160;background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:50%;width:44px;height:44px;font-size:18px;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.35);transition:all .2s}}
+.mob-fab:hover{{transform:scale(1.08)}}
+@media(max-width:900px){{.mob-fab{{display:flex}}}}
+.mob-tpicker{{display:none;position:fixed;bottom:calc(var(--mob-h) + 66px);right:12px;z-index:161;background:var(--sb-bg);border:1px solid var(--glass-b);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:12px;padding:6px;flex-direction:column;gap:4px;box-shadow:0 8px 40px rgba(0,0,0,.45)}}
+.mob-tpicker.open{{display:flex}}
+.mob-topt{{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text-dim);transition:all .15s;white-space:nowrap}}
+.mob-topt:hover,.mob-topt.on{{background:var(--glass);color:var(--text)}}
+.mob-topt.on .tck{{opacity:1}}.tck{{opacity:0;font-size:12px;color:var(--accent)}}
+
+/* LAYOUT */
+.layout{{display:flex;padding-top:var(--hdr-h);min-height:100vh}}
+.main{{margin-left:var(--sb-w);flex:1;min-width:0;padding-bottom:var(--mob-h)}}
+@media(max-width:900px){{.main{{margin-left:0}}}}
+
+/* HERO */
+.hero{{position:relative;overflow:hidden;padding:72px 48px 60px;border-bottom:1px solid var(--glass-b)}}
+.hero-bg{{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 80% at 80% 20%,var(--ga),transparent),radial-gradient(ellipse 50% 60% at 10% 80%,var(--gb),transparent)}}
+.hero-content{{position:relative;z-index:1;max-width:800px}}
+.hero-badge{{display:inline-flex;align-items:center;gap:6px;background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(12px);color:var(--accent);padding:4px 12px;border-radius:100px;font-size:12px;font-weight:600;margin-bottom:22px}}
+.hero h1{{font-size:clamp(36px,6vw,58px);font-weight:900;line-height:1.08;letter-spacing:-.03em;margin-bottom:18px}}
+.grad{{background:linear-gradient(135deg,var(--accent),#e879f9 50%,var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}}
+.hero-desc{{font-size:16px;color:var(--text-dim);margin-bottom:32px;max-width:580px;line-height:1.75}}
+.hero-stats{{display:flex;gap:32px;flex-wrap:wrap;margin-bottom:36px}}
+.stat-item{{display:flex;flex-direction:column;gap:3px}}
+.stat-num{{font-size:clamp(22px,4vw,30px);font-weight:800}}.stat-label{{font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase}}
+.hero-btns{{display:flex;gap:10px;flex-wrap:wrap}}
+.btn{{display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:var(--rs);font-size:14px;font-weight:600;transition:all .2s;border:none;font-family:inherit;cursor:pointer}}
+.btn-p{{background:var(--accent);color:#fff;box-shadow:0 4px 18px rgba(139,120,255,.35)}}.btn-p:hover{{background:var(--accent-h);transform:translateY(-1px);box-shadow:0 8px 28px rgba(139,120,255,.45)}}
+.btn-g{{background:var(--glass);border:1px solid var(--glass-b);color:var(--text-dim)}}.btn-g:hover{{background:var(--glass-h);color:var(--text);border-color:var(--accent)}}
+@media(max-width:600px){{.hero{{padding:48px 20px 40px}}.hero-stats{{gap:20px}}}}
+
+/* SECTIONS */
+.sec{{padding:48px;border-bottom:1px solid var(--glass-b)}}
+.sec-h2{{font-size:24px;font-weight:800;margin-bottom:8px}}
+.sec-sub{{color:var(--text-dim);font-size:14px;margin-bottom:28px;line-height:1.7}}
+@media(max-width:600px){{.sec{{padding:32px 20px}}}}
+
+/* GRIDS */
+.ig{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}}
+.ic{{background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(16px);border-radius:var(--r);padding:20px;overflow:hidden}}
+.ic-t{{font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:12px;text-transform:uppercase;letter-spacing:.07em}}
+.fg{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}}
+.fc{{background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(16px);border-radius:var(--r);padding:20px;transition:all .2s}}
+.fc:hover{{border-color:rgba(139,120,255,.4);background:var(--glass-h);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.2)}}
+.fi{{font-size:26px;margin-bottom:10px}}.ft{{font-size:14px;font-weight:700;margin-bottom:5px}}.fd{{font-size:13px;color:var(--text-dim);line-height:1.6}}
+
+/* FILTER BAR */
+.fbar{{padding:13px 24px;background:var(--hdr);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--glass-b);display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;position:sticky;top:var(--hdr-h);z-index:100;scrollbar-width:none}}
+.fbar::-webkit-scrollbar{{display:none}}
+.fl{{font-size:11px;color:var(--text-muted);font-weight:700;flex-shrink:0;letter-spacing:.05em}}
+.fc2{{padding:5px 12px;border-radius:100px;background:var(--glass);border:1px solid var(--glass-b);color:var(--text-dim);font-size:12px;font-weight:500;transition:all .15s;white-space:nowrap;flex-shrink:0}}
+.fc2:hover,.fc2.active{{background:var(--accent);color:#fff;border-color:var(--accent)}}
+.rc{{margin-left:auto;font-size:11px;color:var(--text-muted);flex-shrink:0}}
+
+/* METHOD CARDS */
+.cat-section{{padding:0 24px 40px;scroll-margin-top:calc(var(--hdr-h)+60px)}}
+@media(max-width:600px){{.cat-section{{padding:0 12px 32px}}}}
+.cat-header{{display:flex;align-items:center;gap:10px;padding:36px 0 18px;border-bottom:1px solid var(--glass-b);margin-bottom:18px}}
+.cat-title{{font-size:18px;font-weight:800}}.cat-count{{font-size:11px;background:var(--glass);border:1px solid var(--glass-b);padding:2px 9px;border-radius:100px;color:var(--text-muted)}}
+.methods-grid{{display:flex;flex-direction:column;gap:10px}}
+.method-card{{background:var(--glass);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);border:1px solid var(--glass-b);border-radius:var(--r);overflow:hidden;transition:border-color .2s,box-shadow .2s;scroll-margin-top:calc(var(--hdr-h)+70px)}}
+.method-card:hover{{border-color:var(--border-bright);box-shadow:0 2px 20px rgba(0,0,0,.2)}}.method-card:target{{border-color:var(--accent);box-shadow:0 0 0 2px rgba(139,120,255,.2)}}.method-card.hidden{{display:none}}
+.method-header{{padding:15px 20px 11px;border-bottom:1px solid transparent;cursor:pointer;user-select:none;transition:background .15s}}
+.method-header:hover{{background:var(--glass-h)}}.method-card.expanded .method-header{{border-bottom-color:var(--glass-b)}}
+.method-name-row{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}}
+.method-name{{font-family:'JetBrains Mono',monospace;font-size:clamp(13px,2.5vw,15px);font-weight:600;color:var(--accent)}}
+.method-badges{{display:flex;gap:5px;align-items:center;flex-wrap:wrap;flex:1}}
+.badge{{font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px;letter-spacing:.04em}}
+.badge-async{{background:rgba(56,189,248,.09);color:var(--accent2);border:1px solid rgba(56,189,248,.2)}}
+.badge-ret{{background:rgba(52,211,153,.07);color:var(--accent3);border:1px solid rgba(52,211,153,.18);font-family:'JetBrains Mono',monospace;font-size:9.5px}}
+.badge-opt{{background:rgba(251,191,36,.07);color:var(--yellow);border:1px solid rgba(251,191,36,.18)}}
+.cta{{font-size:11px;color:var(--text-muted);transition:transform .22s;margin-left:auto;flex-shrink:0}}.method-card.expanded .cta{{transform:rotate(180deg)}}
+.method-doc{{font-size:13px;color:var(--text-dim);line-height:1.6;max-width:720px}}
+.method-body{{overflow:hidden;max-height:0;transition:max-height .3s ease}}.collapsed-body{{max-height:0}}.method-card.expanded .method-body{{max-height:99999px}}
+.params-section{{padding:12px 20px;border-bottom:1px solid var(--glass-b)}}.optional-section{{padding:12px 20px;border-bottom:1px solid var(--glass-b)}}.example-section{{padding:12px 20px;border-bottom:1px solid var(--glass-b)}}
+.section-label{{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:8px}}
+.field-count{{font-size:9px;background:var(--glass);border:1px solid var(--glass-b);padding:1px 6px;border-radius:100px;color:var(--accent);text-transform:none;letter-spacing:0}}
+.param-pills{{display:flex;flex-wrap:wrap;gap:5px}}
+.param-pill{{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 9px;border-radius:6px;cursor:help}}
+.param-pill.required{{background:rgba(139,120,255,.11);color:var(--accent);border:1px solid rgba(139,120,255,.22)}}
+.param-pill.optional{{background:rgba(100,116,139,.06);color:var(--text-muted);border:1px solid var(--glass-b)}}
+.no-params{{font-size:12px;color:var(--text-muted);font-style:italic}}
+.table-wrap{{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--rs)}}
+.fields-table{{width:100%;border-collapse:collapse;font-size:12px;min-width:380px}}
+.fields-table th{{text-align:left;padding:7px 10px;background:var(--glass);color:var(--text-muted);font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--glass-b)}}
+.fields-table td{{padding:6px 10px;vertical-align:top;border-bottom:1px solid rgba(255,255,255,.03)}}.fields-table tr:last-child td{{border-bottom:none}}.fields-table tr:hover td{{background:var(--glass)}}
+.field-name{{font-family:'JetBrains Mono',monospace;color:var(--accent3);font-size:11px;white-space:nowrap;font-weight:500}}
+.field-type{{font-family:'JetBrains Mono',monospace;color:var(--blue);font-size:11px}}.field-doc{{color:var(--text-dim);line-height:1.5}}
+.example-header{{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}}
+.example-actions{{display:flex;gap:6px;align-items:center}}
+.anchor-btn{{font-size:14px;padding:4px 8px;border-radius:6px;background:var(--glass);border:1px solid var(--glass-b);color:var(--text-muted);transition:all .15s}}
+.anchor-btn:hover{{color:var(--accent);border-color:var(--accent)}}
+.copy-btn{{font-size:11px;padding:5px 11px;border-radius:7px;background:var(--glass);border:1px solid var(--glass-b);color:var(--text-dim);font-family:inherit;transition:all .15s;font-weight:600}}
+.copy-btn:hover{{background:var(--accent);color:#fff;border-color:var(--accent)}}.copy-btn.copied{{background:var(--green);color:#000;border-color:var(--green)}}
+.code-block{{background:var(--code-bg)!important;border-radius:var(--rs);overflow:auto;font-size:12.5px;line-height:1.65;border:1px solid var(--glass-b);-webkit-overflow-scrolling:touch}}
+.code-block code{{padding:14px 18px;display:block;font-family:'JetBrains Mono',monospace}}
+@media(max-width:480px){{.code-block{{font-size:11.5px}}}}
+.method-footer{{padding:10px 20px;display:flex;gap:12px;align-items:center}}
+.tg-link{{font-size:12px;color:var(--text-muted);transition:color .15s}}.tg-link:hover{{color:var(--accent2)}}
+
+/* TYPES */
+.types-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:16px}}
+.type-card{{background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(12px);border-radius:var(--rs);padding:14px;transition:all .2s;scroll-margin-top:calc(var(--hdr-h)+60px)}}
+.type-card:hover{{border-color:var(--border-bright);background:var(--glass-h)}}
+.type-name{{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--purple);margin-bottom:9px;display:flex;align-items:center;gap:7px}}
+.type-field-count{{font-size:9px;background:var(--glass);border:1px solid var(--glass-b);padding:1px 5px;border-radius:100px;color:var(--text-muted);font-family:'Inter',sans-serif;font-weight:600}}
+.type-field{{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.03)}}.type-field:last-child{{border-bottom:none}}
+.type-field-name{{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3)}}
+.type-field-type{{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);opacity:.8;text-align:right}}
+.type-empty{{font-size:11px;color:var(--text-muted);font-style:italic}}
+.enums-grid{{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}}
+.enum-card{{background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(12px);border-radius:var(--rs);padding:14px}}
+.enum-name{{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--yellow);margin-bottom:8px}}
+.enum-variants{{display:flex;flex-wrap:wrap;gap:4px}}
+.enum-variant{{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.14);color:var(--yellow);padding:2px 8px;border-radius:5px}}
+
+/* TABS */
+.tabs{{display:flex;gap:2px;border-bottom:1px solid var(--glass-b);margin-bottom:24px;overflow-x:auto}}
+.tab{{padding:10px 18px;border-radius:var(--rs) var(--rs) 0 0;font-size:13px;font-weight:600;color:var(--text-muted);background:none;border:none;font-family:inherit;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}}
+.tab:hover{{color:var(--text)}}.tab.active{{color:var(--accent);border-bottom-color:var(--accent)}}
+.tab-panel{{display:none}}.tab-panel.active{{display:block}}
+.err-sec{{background:var(--glass);border:1px solid var(--glass-b);backdrop-filter:blur(12px);border-radius:var(--r);padding:22px;margin-bottom:14px}}
+.ev{{margin-bottom:18px}}.ev:last-child{{margin-bottom:0}}
+.ev-name{{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--red);margin-bottom:4px}}
+.ev-desc{{font-size:13px;color:var(--text-dim)}}
+
+/* SEARCH DROP */
+.search-drop{{position:fixed;background:var(--sb-bg);border:1px solid var(--glass-b);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.55);z-index:99999;display:none;overflow:hidden}}
+.search-drop.open{{display:block}}
+.sd-head{{padding:8px 14px 6px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);background:var(--glass);border-bottom:1px solid var(--glass-b)}}
+.sd-list{{max-height:340px;overflow-y:auto}}
+.sd-row{{display:flex;align-items:center;gap:8px;padding:9px 14px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--glass-b)}}
+.sd-row:last-child{{border-bottom:none}}.sd-row:hover,.sd-row.focus{{background:var(--glass)}}
+.sd-dot{{width:7px;height:7px;border-radius:50%;flex-shrink:0}}
+.sd-name{{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);flex-shrink:0}}
+.sd-name mark{{background:rgba(139,120,255,.2);color:var(--accent);border-radius:2px;padding:0 1px;font-style:normal;font-weight:700}}
+.sd-doc{{font-size:11px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.sd-cat{{font-size:9.5px;color:var(--text-muted);background:var(--glass);border:1px solid var(--glass-b);padding:1px 6px;border-radius:4px;flex-shrink:0}}
+.sd-empty{{padding:24px;text-align:center;color:var(--text-muted);font-size:13px}}
+.sd-footer{{padding:6px 14px;font-size:10px;color:var(--text-muted);background:var(--glass);border-top:1px solid var(--glass-b);display:flex;justify-content:space-between}}
+.sd-footer kbd{{background:var(--glass);border:1px solid var(--glass-b);border-radius:3px;padding:0 4px;font-family:'JetBrains Mono',monospace;font-size:9px}}
+@media(max-width:600px){{.search-drop{{left:8px!important;right:8px!important;width:auto!important}}.sd-footer{{display:none}}}}
+
+/* FOOTER */
+.footer{{margin-left:var(--sb-w);padding:36px 48px;border-top:1px solid var(--glass-b);background:var(--glass);backdrop-filter:blur(16px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}}
+@media(max-width:900px){{.footer{{margin-left:0;padding:28px 20px}}}}
+.footer-links{{display:flex;gap:16px;flex-wrap:wrap}}
+.footer-links a{{font-size:13px;color:var(--text-muted);transition:color .15s}}.footer-links a:hover{{color:var(--accent)}}
+.hljs{{background:transparent!important}}[data-theme="light"] pre code{{color:#cdd6f4}}
+</style>
 </head>
 <body>
 
-<header class="top-header">
-  <a class="logo" href="https://tgbotrs.ankitchaubey.in">
+<div class="search-drop" id="searchDrop">
+  <div class="sd-head" id="sdHead">Methods</div>
+  <div class="sd-list" id="sdList"></div>
+  <div class="sd-footer"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> jump</span><span><kbd>Esc</kbd> close</span></div>
+</div>
+
+<div class="sb-overlay" id="sbOverlay" onclick="closeSidebar()"></div>
+
+<!-- Mobile theme picker -->
+<div class="mob-tpicker" id="mobTP">
+  <button class="mob-topt" data-t="light" onclick="setTheme('light')">☀️ Light <span class="tck">✓</span></button>
+  <button class="mob-topt" data-t="dark" onclick="setTheme('dark')">🌙 Dark <span class="tck">✓</span></button>
+  <button class="mob-topt" data-t="amoled" onclick="setTheme('amoled')">⬛ AMOLED <span class="tck">✓</span></button>
+</div>
+<button class="mob-fab" id="mobFab" onclick="toggleMobTheme()" title="Change theme">🎨</button>
+
+<header class="hdr">
+  <button class="mob-menu-btn" onclick="openSidebar()" aria-label="Menu">☰</button>
+  <a class="logo" href="https://{CUSTOM_DOMAIN}">
     <div class="logo-icon">🦀</div>
     <span class="logo-text">tgbotrs</span>
-    <span class="logo-version">v0.1.4</span>
+    <span class="logo-ver">v{CRATE_VERSION}</span>
   </a>
-  <div class="header-search" id="searchOuter" style="flex:1;max-width:440px;position:relative">
-    <span class="search-icon">🔍</span>
-    <input type="text" id="globalSearch" placeholder="Search 165 methods… (Ctrl+K)" autocomplete="off">
-    <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--text-muted);background:var(--bg4);border:1px solid var(--border-bright);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;pointer-events:none">Ctrl K</span>
+  <div class="hdr-search" id="searchOuter">
+    <span class="s-ico">🔍</span>
+    <input type="text" id="globalSearch" placeholder="Search {S["methods"]} methods… (Ctrl+K)" autocomplete="off">
+    <span class="s-kbd">Ctrl K</span>
   </div>
-  <nav class="header-nav" style="display:flex;align-items:center;gap:6px;margin-left:auto">
-    <a href="#quick-start">Quick Start</a>
-    <a href="#methods">Methods</a>
-    <a href="#types">Types</a>
-    <div class="theme-switcher">
+  <nav class="hdr-nav">
+    <a href="#quick-start" class="nav-hide">Start</a>
+    <a href="#methods" class="nav-hide">Methods</a>
+    <a href="#types" class="nav-hide">Types</a>
+    <div class="theme-sw">
       <button class="th-btn" data-t="light" onclick="setTheme('light')" title="Light">☀️</button>
       <button class="th-btn" data-t="dark" onclick="setTheme('dark')" title="Dark">🌙</button>
       <button class="th-btn" data-t="amoled" onclick="setTheme('amoled')" title="AMOLED">⬛</button>
@@ -733,163 +632,118 @@ def assemble(method_cards, sidebar_html, types_html, enums_html, stats):
   </nav>
 </header>
 
-<!-- Search dropdown — outside header so it's never clipped -->
-<div class="search-drop" id="searchDrop">
-  <div class="sd-head" id="sdHead">Methods</div>
-  <div class="sd-list" id="sdList"></div>
-  <div class="sd-footer">
-    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-    <span><kbd>↵</kbd> jump</span>
-    <span><kbd>Esc</kbd> close</span>
-  </div>
-</div>
-
 <div class="layout">
-<aside class="sidebar">
-  <div class="sidebar-section-title">Navigation</div>
-  <a class="sidebar-link" href="#quick-start"><span class="dot"></span>Quick Start</a>
-  <a class="sidebar-link" href="#installation"><span class="dot"></span>Installation</a>
-  <a class="sidebar-link" href="#features"><span class="dot"></span>Features</a>
-  <a class="sidebar-link" href="#methods"><span class="dot"></span>All Methods</a>
-  <a class="sidebar-link" href="#types"><span class="dot"></span>Types ({S["types"]})</a>
-  <a class="sidebar-link" href="#errors"><span class="dot"></span>Error Handling</a>
-  <a class="sidebar-link" href="#polling"><span class="dot"></span>Long Polling</a>
-  <a class="sidebar-link" href="#webhook"><span class="dot"></span>Webhook</a>
-  <div class="sidebar-divider"></div>
-  <div class="sidebar-section-title">Methods by Category</div>
+<aside class="sidebar" id="sidebar">
+  <div class="sb-search"><input type="text" id="sbSearch" placeholder="🔍 Filter methods…" autocomplete="off"></div>
+  <div class="sb-ttl">Navigation</div>
+  <a class="sb-link" href="#quick-start" onclick="closeSidebar()"><span class="dot"></span>Quick Start</a>
+  <a class="sb-link" href="#installation" onclick="closeSidebar()"><span class="dot"></span>Installation</a>
+  <a class="sb-link" href="#features" onclick="closeSidebar()"><span class="dot"></span>Features</a>
+  <a class="sb-link" href="#methods" onclick="closeSidebar()"><span class="dot"></span>All Methods</a>
+  <a class="sb-link" href="#types" onclick="closeSidebar()"><span class="dot"></span>Types ({S["types"]})</a>
+  <a class="sb-link" href="#errors" onclick="closeSidebar()"><span class="dot"></span>Error Handling</a>
+  <a class="sb-link" href="#polling" onclick="closeSidebar()"><span class="dot"></span>Long Polling</a>
+  <a class="sb-link" href="#webhook" onclick="closeSidebar()"><span class="dot"></span>Webhook</a>
+  <div class="sb-div"></div>
+  <div class="sb-ttl">Methods by Category</div>
   {sidebar_html}
 </aside>
 
 <main class="main">
-  <div class="hero">
-    <div class="hero-content">
-      <div class="hero-badge">🦀 Telegram Bot API 9.4 · Fully Auto-Generated</div>
-      <h1>The <span class="grad">complete</span> Rust<br>Telegram Bot library</h1>
-      <p class="hero-desc"><strong>tgbotrs</strong> gives you every Telegram Bot API method and type — fully typed, fully async, auto-generated from the official spec. Built with Tokio, powered by Rust's safety guarantees.</p>
-      <div class="hero-stats">
-        <div class="stat-item"><span class="stat-num">{S["methods"]}</span><span class="stat-label">Methods</span></div>
-        <div class="stat-item"><span class="stat-num">{S["types"]}</span><span class="stat-label">Types</span></div>
-        <div class="stat-item"><span class="stat-num">9.4</span><span class="stat-label">API Version</span></div>
-        <div class="stat-item"><span class="stat-num">100%</span><span class="stat-label">Async</span></div>
-      </div>
-      <div class="hero-btns">
-        <a href="#quick-start" class="btn btn-filled">🚀 Get Started</a>
-        <a href="https://crates.io/crates/tgbotrs" target="_blank" class="btn btn-outline">📦 crates.io</a>
-        <a href="https://docs.rs/tgbotrs" target="_blank" class="btn btn-outline">📖 docs.rs</a>
-        <a href="https://github.com/ankit-chaubey/tgbotrs" target="_blank" class="btn btn-outline">★ GitHub</a>
-      </div>
+<div class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <div class="hero-badge">🦀 Telegram Bot API 9.4 · Fully Auto-Generated</div>
+    <h1>The <span class="grad">complete</span> Rust<br>Telegram Bot library</h1>
+    <p class="hero-desc"><strong>tgbotrs</strong> gives you every Telegram Bot API method and type — fully typed, fully async, auto-generated from the official spec. Built with Tokio. Lowest supported: <strong>v{CRATE_VERSION}</strong>.</p>
+    <div class="hero-stats">
+      <div class="stat-item"><span class="stat-num">{S["methods"]}</span><span class="stat-label">Methods</span></div>
+      <div class="stat-item"><span class="stat-num">{S["types"]}</span><span class="stat-label">Types</span></div>
+      <div class="stat-item"><span class="stat-num">9.4</span><span class="stat-label">API Version</span></div>
+      <div class="stat-item"><span class="stat-num">100%</span><span class="stat-label">Async</span></div>
+    </div>
+    <div class="hero-btns">
+      <a href="#quick-start" class="btn btn-p">🚀 Get Started</a>
+      <a href="https://crates.io/crates/tgbotrs" target="_blank" class="btn btn-g">📦 crates.io</a>
+      <a href="https://docs.rs/tgbotrs" target="_blank" class="btn btn-g">📖 docs.rs</a>
+      <a href="https://github.com/ankit-chaubey/tgbotrs" target="_blank" class="btn btn-g">★ GitHub</a>
     </div>
   </div>
+</div>
 
-  <section class="section" id="quick-start">
-    <h2 class="section-h2">🚀 Quick Start</h2>
-    <p class="section-sub">Get your first bot running in under 2 minutes.</p>
-    <div style="display:flex;flex-direction:column;gap:16px;max-width:780px">
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Step 1 — Get your bot token</div>
-        <div style="font-size:13px;color:var(--text-dim)">Chat with <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent2)">@BotFather</a> on Telegram → /newbot → copy your token.</div>
-      </div>
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Step 2 — Cargo.toml</div>
-        <div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-        <pre class="code-block"><code class="language-toml">[dependencies]
-tgbotrs = "0.1"
-tokio   = {{ version = "1", features = ["full"] }}</code></pre>
-      </div>
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Step 3 — src/main.rs</div>
-        <div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-        <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, Poller, UpdateHandler}};
+<section class="sec" id="quick-start">
+  <h2 class="sec-h2">🚀 Quick Start</h2>
+  <p class="sec-sub">Get your first bot running in under 2 minutes.</p>
+  <div style="display:flex;flex-direction:column;gap:14px;max-width:800px">
+    <div class="ic"><div class="ic-t">Step 1 — Get your bot token</div><div style="font-size:13px;color:var(--text-dim)">Chat with <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent2)">@BotFather</a> → /newbot → copy your token.</div></div>
+    <div class="ic"><div class="ic-t">Step 2 — Cargo.toml</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-toml">[dependencies]
+tgbotrs = "{CRATE_VERSION}"
+tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
+    <div class="ic"><div class="ic-t">Step 3 — src/main.rs</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, Poller, UpdateHandler}};
 
 #[tokio::main]
 async fn main() {{
     let bot = Bot::new("YOUR_BOT_TOKEN").await.unwrap();
-    println!("Running as @{{}}", bot.me.username.as_deref().unwrap_or("?"));
-
     let handler: UpdateHandler = Box::new(|bot, update| {{
         Box::pin(async move {{
             let Some(msg) = update.message else {{ return }};
             let Some(text) = msg.text else {{ return }};
             let reply = match text.as_str() {{
                 "/start" => "👋 Hello! Powered by tgbotrs 🦀".to_string(),
-                "/help"  => "/start /help".to_string(),
                 other    => format!("Echo: {{}}", other),
             }};
             let _ = bot.send_message(msg.chat.id, reply, None).await;
         }})
     }});
-
     Poller::new(bot, handler).timeout(30).start().await.unwrap();
-}}</code></pre>
-      </div>
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Step 4 — Run</div>
-        <div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Terminal</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-        <pre class="code-block"><code class="language-bash">cargo run</code></pre>
-      </div>
-    </div>
-  </section>
+}}</code></pre></div>
+    <div class="ic"><div class="ic-t">Step 4 — Run</div><pre class="code-block"><code class="language-bash">cargo run</code></pre></div>
+  </div>
+</section>
 
-  <section class="section" id="installation">
-    <h2 class="section-h2">📦 Installation</h2>
-    <p class="section-sub">Full Cargo.toml configurations for every use-case.</p>
-    <div class="install-grid">
-      <div class="install-card">
-        <div class="install-card-title">Standard (Long Polling)</div>
-        <div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-        <pre class="code-block"><code class="language-toml">[dependencies]
-tgbotrs = "0.1"
-tokio   = {{ version = "1", features = ["full"] }}</code></pre>
-      </div>
-      <div class="install-card">
-        <div class="install-card-title">With Webhook Feature</div>
-        <div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-        <pre class="code-block"><code class="language-toml">[dependencies]
-tgbotrs = {{ version = "0.1", features = ["webhook"] }}
-tokio   = {{ version = "1", features = ["full"] }}</code></pre>
-      </div>
-      <div class="install-card">
-        <div class="install-card-title">Dependencies Included</div>
-        <div style="font-size:13px;color:var(--text-dim);line-height:1.9">
-          ✅ reqwest (HTTP client)<br>
-          ✅ serde + serde_json<br>
-          ✅ tokio (async runtime)<br>
-          ✅ thiserror (error types)<br>
-          🔌 axum (webhook only)
-        </div>
-      </div>
-      <div class="install-card">
-        <div class="install-card-title">Env-based Token</div>
-        <div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-        <pre class="code-block"><code class="language-rust">let token = std::env::var("BOT_TOKEN")
-    .expect("BOT_TOKEN not set");
-let bot = Bot::new(token).await?;</code></pre>
-      </div>
-    </div>
-  </section>
+<section class="sec" id="installation">
+  <h2 class="sec-h2">📦 Installation</h2>
+  <p class="sec-sub">Minimum supported: <strong>v{CRATE_VERSION}</strong></p>
+  <div class="ig">
+    <div class="ic"><div class="ic-t">Standard (Long Polling)</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-toml">[dependencies]
+tgbotrs = "{CRATE_VERSION}"
+tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
+    <div class="ic"><div class="ic-t">With Webhook Feature</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-toml">[dependencies]
+tgbotrs = {{ version = "{CRATE_VERSION}", features = ["webhook"] }}
+tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
+    <div class="ic"><div class="ic-t">Dependencies Included</div><div style="font-size:13px;color:var(--text-dim);line-height:2">✅ reqwest<br>✅ serde + serde_json<br>✅ tokio<br>✅ thiserror<br>🔌 axum (webhook only)</div></div>
+    <div class="ic"><div class="ic-t">Env-based Token</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">let token = std::env::var("BOT_TOKEN").expect("BOT_TOKEN not set");
+let bot = Bot::new(token).await?;</code></pre></div>
+  </div>
+</section>
 
-  <section class="section" id="features">
-    <h2 class="section-h2">✨ Features</h2>
-    <p class="section-sub">Everything you need to build powerful Telegram bots in Rust.</p>
-    <div class="features-grid">
-      <div class="feature-card"><div class="feature-icon">⚡</div><div class="feature-title">Fully Async</div><div class="feature-desc">Built on Tokio. Every API call is non-blocking. Handle thousands of concurrent updates.</div></div>
-      <div class="feature-card"><div class="feature-icon">🔒</div><div class="feature-title">Strongly Typed</div><div class="feature-desc">Every method, parameter, and response is strongly typed. Catch mistakes at compile time.</div></div>
-      <div class="feature-card"><div class="feature-icon">🤖</div><div class="feature-title">Auto-Generated</div><div class="feature-desc">All {S["methods"]} methods and {S["types"]} types auto-generated from the official Telegram API spec. Always up to date.</div></div>
-      <div class="feature-card"><div class="feature-icon">🏗️</div><div class="feature-title">Builder Pattern</div><div class="feature-desc">Optional params use ergonomic builder structs. Chain like <code style="background:var(--bg4);padding:1px 5px;border-radius:3px">.parse_mode("HTML")</code>.</div></div>
-      <div class="feature-card"><div class="feature-icon">🪝</div><div class="feature-title">Built-in Webhook</div><div class="feature-desc">Optional axum-based webhook server. One line to switch from polling to webhooks.</div></div>
-      <div class="feature-card"><div class="feature-icon">📁</div><div class="feature-title">File Uploads</div><div class="feature-desc">Upload by path, URL, or bytes. InputFile handles multipart transparently.</div></div>
-      <div class="feature-card"><div class="feature-icon">🎯</div><div class="feature-title">ChatId Flexibility</div><div class="feature-desc">Pass IDs as i64, &str, or @username — ChatId handles all conversions automatically.</div></div>
-      <div class="feature-card"><div class="feature-icon">🎮</div><div class="feature-title">All Keyboard Types</div><div class="feature-desc">InlineKeyboard, ReplyKeyboard, ForceReply — all four keyboard types fully supported.</div></div>
-      <div class="feature-card"><div class="feature-icon">🔧</div><div class="feature-title">Custom API Server</div><div class="feature-desc">Use <code style="background:var(--bg4);padding:1px 5px;border-radius:3px">Bot::with_api_url()</code> to point at your own local Bot API server.</div></div>
-    </div>
-  </section>
+<section class="sec" id="features">
+  <h2 class="sec-h2">✨ Features</h2>
+  <p class="sec-sub">Everything you need to build powerful Telegram bots in Rust.</p>
+  <div class="fg">
+    <div class="fc"><div class="fi">⚡</div><div class="ft">Fully Async</div><div class="fd">Built on Tokio. Handle thousands of concurrent updates.</div></div>
+    <div class="fc"><div class="fi">🔒</div><div class="ft">Strongly Typed</div><div class="fd">Every method, parameter and response is strongly typed. Compile-time safety.</div></div>
+    <div class="fc"><div class="fi">🤖</div><div class="ft">Auto-Generated</div><div class="fd">All {S["methods"]} methods and {S["types"]} types auto-generated from the official spec.</div></div>
+    <div class="fc"><div class="fi">🏗️</div><div class="ft">Builder Pattern</div><div class="fd">Chain optional params like <code style="background:var(--glass);padding:1px 5px;border-radius:3px">.parse_mode("HTML")</code>.</div></div>
+    <div class="fc"><div class="fi">🪝</div><div class="ft">Built-in Webhook</div><div class="fd">Optional axum-based webhook server. One line to switch from polling.</div></div>
+    <div class="fc"><div class="fi">📁</div><div class="ft">File Uploads</div><div class="fd">Upload by path, URL, or bytes. InputFile handles multipart transparently.</div></div>
+    <div class="fc"><div class="fi">🎯</div><div class="ft">ChatId Flexibility</div><div class="fd">Pass IDs as i64, &str, or @username — all conversions automatic.</div></div>
+    <div class="fc"><div class="fi">🎮</div><div class="ft">All Keyboard Types</div><div class="fd">InlineKeyboard, ReplyKeyboard, ForceReply — all four types supported.</div></div>
+    <div class="fc"><div class="fi">🔧</div><div class="ft">Custom API Server</div><div class="fd">Use <code style="background:var(--glass);padding:1px 5px;border-radius:3px">Bot::with_api_url()</code> to point at your own server.</div></div>
+  </div>
+</section>
 
-  <section class="section" id="polling">
-    <h2 class="section-h2">🔄 Long Polling</h2>
-    <p class="section-sub">The simplest way to receive updates — no external server needed.</p>
-    <div style="max-width:780px">
-      <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Polling with inline keyboard + callback handler</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-      <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, Poller, UpdateHandler}};
+<section class="sec" id="polling">
+  <h2 class="sec-h2">🔄 Long Polling</h2>
+  <p class="sec-sub">Simplest way to receive updates — no external server needed.</p>
+  <div style="max-width:800px">
+    <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Polling with inline keyboard</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, Poller, UpdateHandler}};
 use tgbotrs::gen_methods::{{SendMessageParams, AnswerCallbackQueryParams}};
 use tgbotrs::types::{{InlineKeyboardMarkup, InlineKeyboardButton}};
 use tgbotrs::ReplyMarkup;
@@ -897,72 +751,43 @@ use tgbotrs::ReplyMarkup;
 #[tokio::main]
 async fn main() {{
     let bot = Bot::new("YOUR_BOT_TOKEN").await.unwrap();
-
     let handler: UpdateHandler = Box::new(|bot, update| {{
         Box::pin(async move {{
             if let Some(msg) = update.message {{
                 if msg.text.as_deref() == Some("/start") {{
                     let keyboard = ReplyMarkup::InlineKeyboard(InlineKeyboardMarkup {{
-                        inline_keyboard: vec![vec![
-                            InlineKeyboardButton {{
-                                text: "🔵 Primary Button".into(),
-                                callback_data: Some("btn1".into()),
-                                style: Some("primary".into()),
-                                ..Default::default()
-                            }},
-                            InlineKeyboardButton {{
-                                text: "🟢 Success".into(),
-                                callback_data: Some("btn2".into()),
-                                style: Some("success".into()),
-                                ..Default::default()
-                            }},
-                        ]]
+                        inline_keyboard: vec![vec![InlineKeyboardButton {{
+                            text: "🔵 Click me".into(),
+                            callback_data: Some("btn1".into()),
+                            ..Default::default()
+                        }}]]
                     }});
-                    let params = SendMessageParams::new()
-                        .parse_mode("HTML".to_string())
-                        .reply_markup(keyboard);
-                    let _ = bot.send_message(msg.chat.id, "&lt;b&gt;Hello!&lt;/b&gt; Pick a button 👇", Some(params)).await;
+                    let params = SendMessageParams::new().reply_markup(keyboard);
+                    let _ = bot.send_message(msg.chat.id, "Pick a button 👇", Some(params)).await;
                 }}
             }}
             if let Some(cq) = update.callback_query {{
-                let _ = bot.answer_callback_query(
-                    cq.id,
-                    Some(AnswerCallbackQueryParams::new().text("Button clicked! ✅".to_string()))
+                let _ = bot.answer_callback_query(cq.id,
+                    Some(AnswerCallbackQueryParams::new().text("Clicked! ✅".to_string()))
                 ).await;
             }}
         }})
     }});
-
-    Poller::new(bot, handler)
-        .timeout(30).limit(100)
-        .allowed_updates(vec!["message".into(), "callback_query".into()])
-        .start().await.unwrap();
+    Poller::new(bot, handler).timeout(30).limit(100).start().await.unwrap();
 }}</code></pre>
-      <div style="margin-top:20px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text-dim);margin-bottom:12px">Poller Configuration</div>
-        <table class="fields-table">
-          <thead><tr><th>Method</th><th>Default</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td class="field-name">.timeout(30)</td><td class="field-type">30</td><td class="field-doc">Long-poll timeout in seconds (0 = short poll)</td></tr>
-            <tr><td class="field-name">.limit(100)</td><td class="field-type">100</td><td class="field-doc">Max updates per getUpdates call (1–100)</td></tr>
-            <tr><td class="field-name">.allowed_updates(vec![...])</td><td class="field-type">all</td><td class="field-doc">Filter update types: message, callback_query, inline_query, etc.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
+  </div>
+</section>
 
-  <section class="section" id="webhook">
-    <h2 class="section-h2">🪝 Webhook Server</h2>
-    <p class="section-sub">Production-ready built-in webhook server powered by Axum.</p>
-    <div style="max-width:780px;display:flex;flex-direction:column;gap:16px">
-      <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Full webhook setup</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-      <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, UpdateHandler, WebhookServer}};
+<section class="sec" id="webhook">
+  <h2 class="sec-h2">🪝 Webhook Server</h2>
+  <p class="sec-sub">Production-ready webhook server powered by Axum.</p>
+  <div style="max-width:800px">
+    <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Full webhook setup</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, UpdateHandler, WebhookServer}};
 
 #[tokio::main]
 async fn main() {{
     let bot = Bot::new("YOUR_BOT_TOKEN").await.unwrap();
-
     let handler: UpdateHandler = Box::new(|bot, update| {{
         Box::pin(async move {{
             if let Some(msg) = update.message {{
@@ -970,183 +795,95 @@ async fn main() {{
             }}
         }})
     }});
-
     WebhookServer::new(bot, handler)
-        .port(8080)
-        .path("/webhook")
-        .secret_token("my_secret_token")
-        .max_connections(40)
-        .drop_pending_updates()
-        .allowed_updates(vec!["message".into(), "callback_query".into()])
-        .start("https://yourdomain.com")
-        .await.unwrap();
+        .port(8080).path("/webhook")
+        .secret_token("my_secret").max_connections(40)
+        .start("https://yourdomain.com").await.unwrap();
 }}</code></pre>
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text-dim);margin-bottom:12px">WebhookServer Configuration</div>
-        <table class="fields-table">
-          <thead><tr><th>Method</th><th>Default</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td class="field-name">.port(8080)</td><td class="field-type">8080</td><td class="field-doc">Local bind port (Telegram supports 80, 88, 443, 8443)</td></tr>
-            <tr><td class="field-name">.path("/webhook")</td><td class="field-type">/webhook</td><td class="field-doc">URL path Telegram POSTs to</td></tr>
-            <tr><td class="field-name">.secret_token("...")</td><td class="field-type">None</td><td class="field-doc">Validates X-Telegram-Bot-Api-Secret-Token header</td></tr>
-            <tr><td class="field-name">.max_connections(40)</td><td class="field-type">40</td><td class="field-doc">Max simultaneous connections from Telegram (1–100)</td></tr>
-            <tr><td class="field-name">.drop_pending_updates()</td><td class="field-type">false</td><td class="field-doc">Clear update queue when registering webhook</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
+  </div>
+</section>
 
-  <section id="methods">
-    <div class="filter-bar">
-      <span class="filter-label">Filter:</span>
-      <button class="filter-chip active" onclick="filterCat('all',this)">All ({S["methods"]})</button>
-      <button class="filter-chip" onclick="filterCat('Sending Messages',this)">📤 Send</button>
-      <button class="filter-chip" onclick="filterCat('Getting Info',this)">ℹ️ Get</button>
-      <button class="filter-chip" onclick="filterCat('Editing',this)">✏️ Edit</button>
-      <button class="filter-chip" onclick="filterCat('Chat Administration',this)">🛡️ Admin</button>
-      <button class="filter-chip" onclick="filterCat('Stickers',this)">😸 Stickers</button>
-      <button class="filter-chip" onclick="filterCat('Payments & Stars',this)">💰 Payments</button>
-      <button class="filter-chip" onclick="filterCat('Updates & Webhook',this)">🔄 Updates</button>
-      <button class="filter-chip" onclick="filterCat('Business',this)">🏢 Business</button>
-      <span class="results-count" id="resultsCount">{S["methods"]} methods</span>
-    </div>
-    <div id="methodsContainer">
+<section id="methods">
+  <div class="fbar">
+    <span class="fl">Filter:</span>
+    <button class="fc2 active" onclick="filterCat('all',this)">All ({S["methods"]})</button>
+    <button class="fc2" onclick="filterCat('Sending Messages',this)">📤 Send</button>
+    <button class="fc2" onclick="filterCat('Getting Info',this)">ℹ️ Get</button>
+    <button class="fc2" onclick="filterCat('Editing',this)">✏️ Edit</button>
+    <button class="fc2" onclick="filterCat('Deletion',this)">🗑️ Delete</button>
+    <button class="fc2" onclick="filterCat('Chat Administration',this)">🛡️ Admin</button>
+    <button class="fc2" onclick="filterCat('Stickers',this)">😸 Stickers</button>
+    <button class="fc2" onclick="filterCat('Payments & Stars',this)">💰 Payments</button>
+    <button class="fc2" onclick="filterCat('Updates & Webhook',this)">🔄 Updates</button>
+    <button class="fc2" onclick="filterCat('Configuration',this)">⚙️ Config</button>
+    <span class="rc" id="resultsCount">{S["methods"]} methods</span>
+  </div>
+  <div id="methodsContainer" style="padding:0 0 8px">
 {method_cards}
-    </div>
-  </section>
+  </div>
+</section>
 
-  <section class="section" id="types">
-    <h2 class="section-h2">📐 Types Reference</h2>
-    <p class="section-sub">All {S["types"]} Telegram types. Below shows commonly used types with their fields. See <a href="https://docs.rs/tgbotrs" target="_blank" style="color:var(--accent2)">docs.rs</a> for the complete list.</p>
-    <div class="tabs">
-      <button class="tab active" onclick="showTab('structs',this)">Structs ({S["types"]})</button>
-      <button class="tab" onclick="showTab('enums',this)">Enums ({S["enums"]})</button>
-      <button class="tab" onclick="showTab('special',this)">Special Types</button>
-    </div>
-    <div id="tab-structs" class="tab-panel active">
-      <div class="types-grid">{types_html}</div>
-    </div>
-    <div id="tab-enums" class="tab-panel">
-      <div class="enums-grid">{enums_html}</div>
-    </div>
-    <div id="tab-special" class="tab-panel">
-      <div style="display:flex;flex-direction:column;gap:16px;max-width:780px">
-        <div class="error-section">
-          <div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">ChatId</div>
-          <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Accepts numeric IDs or username strings transparently.</p>
-          <pre class="code-block"><code class="language-rust">// All these work everywhere ChatId is accepted:
-bot.send_message(123456789i64, "text", None).await?;
-bot.send_message("@mychannel", "text", None).await?;
-bot.send_message(ChatId::Id(123456789), "text", None).await?;</code></pre>
-        </div>
-        <div class="error-section">
-          <div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">InputFile</div>
-          <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Flexible file input — path, URL, or raw bytes.</p>
-          <pre class="code-block"><code class="language-rust">use tgbotrs::InputFile;
-
+<section class="sec" id="types">
+  <h2 class="sec-h2">📐 Types Reference</h2>
+  <p class="sec-sub">All {S["types"]} Telegram types — every field shown. See <a href="https://docs.rs/tgbotrs" target="_blank" style="color:var(--accent2)">docs.rs</a> for full rustdoc.</p>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('structs',this)">Structs ({S["types"]})</button>
+    <button class="tab" onclick="showTab('enums',this)">Enums ({S["enums"]})</button>
+    <button class="tab" onclick="showTab('special',this)">Special Types</button>
+  </div>
+  <div id="tab-structs" class="tab-panel active"><div class="types-grid">{types_html}</div></div>
+  <div id="tab-enums" class="tab-panel"><div class="enums-grid">{enums_html}</div></div>
+  <div id="tab-special" class="tab-panel">
+    <div style="display:flex;flex-direction:column;gap:14px;max-width:800px">
+      <div class="err-sec"><div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">ChatId</div><p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Accepts numeric IDs or username strings.</p><pre class="code-block"><code class="language-rust">bot.send_message(123456789i64, "text", None).await?;
+bot.send_message("@mychannel", "text", None).await?;</code></pre></div>
+      <div class="err-sec"><div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">InputFile</div><p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Flexible file input — path, URL, or bytes.</p><pre class="code-block"><code class="language-rust">use tgbotrs::InputFile;
 let by_path  = InputFile::path("photo.jpg");
 let by_url   = InputFile::url("https://example.com/photo.jpg");
-let bytes    = std::fs::read("photo.jpg").unwrap();
-let by_bytes = InputFile::bytes("photo.jpg", bytes);</code></pre>
-        </div>
-        <div class="error-section">
-          <div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">ReplyMarkup</div>
-          <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">All four keyboard types unified in one enum.</p>
-          <pre class="code-block"><code class="language-rust">use tgbotrs::ReplyMarkup;
-use tgbotrs::types::{{InlineKeyboardMarkup, InlineKeyboardButton}};
-
-let markup = ReplyMarkup::InlineKeyboard(InlineKeyboardMarkup {{
-    inline_keyboard: vec![vec![
-        InlineKeyboardButton {{
-            text: "🔵 Click".into(),
-            callback_data: Some("cb1".into()),
-            style: Some("primary".into()), // Bot API 9.4
-            ..Default::default()
-        }}
-    ]]
-}});</code></pre>
-        </div>
-        <div class="error-section">
-          <div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">InputMedia</div>
-          <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Media group for send_media_group.</p>
-          <pre class="code-block"><code class="language-rust">use tgbotrs::{{InputMedia, types::InputMediaPhoto}};
-use tgbotrs::InputFileOrString;
-
-let media = vec![
-    InputMedia::Photo(InputMediaPhoto {{
-        r#type: "photo".into(),
-        media: InputFileOrString::String("file_id".into()),
-        caption: Some("Caption 1".into()),
-        ..Default::default()
-    }}),
-];</code></pre>
-        </div>
-      </div>
+let by_bytes = InputFile::bytes("photo.jpg", std::fs::read("photo.jpg").unwrap());</code></pre></div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="section" id="errors">
-    <h2 class="section-h2">⚠️ Error Handling</h2>
-    <p class="section-sub">All API calls return <code style="background:var(--bg3);padding:1px 6px;border-radius:4px">Result&lt;T, BotError&gt;</code> — handle specific errors with pattern matching.</p>
-    <div style="max-width:780px;display:flex;flex-direction:column;gap:16px">
-      <div class="error-section">
-        <div style="font-size:15px;font-weight:700;margin-bottom:16px;font-family:'JetBrains Mono',monospace">BotError variants</div>
-        <div class="error-variant">
-          <div class="error-variant-name">BotError::Api {{ code, description, retry_after, migrate_to_chat_id }}</div>
-          <div class="error-variant-desc">Telegram returned ok=false. Code 429 = flood wait, 403 = blocked, 400 = bad request.</div>
-        </div>
-        <div class="error-variant">
-          <div class="error-variant-name">BotError::Http(reqwest::Error)</div>
-          <div class="error-variant-desc">Network error — connection refused, timeout, DNS failure.</div>
-        </div>
-        <div class="error-variant">
-          <div class="error-variant-name">BotError::Json(serde_json::Error)</div>
-          <div class="error-variant-desc">Failed to (de)serialize request or response.</div>
-        </div>
-        <div class="error-variant">
-          <div class="error-variant-name">BotError::InvalidToken</div>
-          <div class="error-variant-desc">Token doesn't contain a colon — invalid format.</div>
-        </div>
-      </div>
-      <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Error handling patterns</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
-      <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, BotError}};
-
-async fn send_safe(bot: &Bot, chat_id: i64, text: &str) {{
-    match bot.send_message(chat_id, text, None).await {{
-        Ok(msg) => println!("Sent #{{}}", msg.message_id),
-        Err(BotError::Api {{ code: 403, .. }}) => {{
-            println!("Bot was blocked by this user");
-        }}
-        Err(BotError::Api {{ code: 429, retry_after: Some(secs), .. }}) => {{
-            println!("Flood wait: retry after {{}} seconds", secs);
-            tokio::time::sleep(std::time::Duration::from_secs(secs as u64)).await;
-        }}
-        Err(BotError::Api {{ code, description, .. }}) => {{
-            eprintln!("API [{{}}]: {{}}", code, description);
-        }}
-        Err(e) => eprintln!("Error: {{}}", e),
+<section class="sec" id="errors">
+  <h2 class="sec-h2">⚠️ Error Handling</h2>
+  <p class="sec-sub">All calls return <code style="background:var(--glass);padding:1px 6px;border-radius:4px">Result&lt;T, BotError&gt;</code></p>
+  <div style="max-width:800px;display:flex;flex-direction:column;gap:14px">
+    <div class="err-sec">
+      <div style="font-size:15px;font-weight:700;margin-bottom:14px;font-family:'JetBrains Mono',monospace">BotError variants</div>
+      <div class="ev"><div class="ev-name">BotError::Api {{ code, description, retry_after, migrate_to_chat_id }}</div><div class="ev-desc">Telegram returned ok=false. 429=flood, 403=blocked, 400=bad request.</div></div>
+      <div class="ev"><div class="ev-name">BotError::Http(reqwest::Error)</div><div class="ev-desc">Network error — connection refused, timeout, DNS failure.</div></div>
+      <div class="ev"><div class="ev-name">BotError::Json(serde_json::Error)</div><div class="ev-desc">Failed to (de)serialize request or response.</div></div>
+      <div class="ev"><div class="ev-name">BotError::InvalidToken</div><div class="ev-desc">Token doesn't contain a colon — invalid format.</div></div>
+    </div>
+    <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Error handling patterns</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">match bot.send_message(chat_id, text, None).await {{
+    Ok(msg) => println!("Sent #{{}}", msg.message_id),
+    Err(BotError::Api {{ code: 403, .. }}) => println!("Bot was blocked"),
+    Err(BotError::Api {{ code: 429, retry_after: Some(secs), .. }}) => {{
+        tokio::time::sleep(std::time::Duration::from_secs(secs as u64)).await;
     }}
-}}
-
-// Built-in helpers:
-let is_blocked = error.is_api_error_code(403);
-let wait_secs  = error.flood_wait_seconds(); // Option&lt;i64&gt;</code></pre>
-    </div>
-  </section>
-
+    Err(e) => eprintln!("Error: {{}}", e),
+}}</code></pre>
+  </div>
+</section>
 </main>
 </div>
+
+<nav class="mob-bnav">
+  <button class="mob-nb" onclick="scrollTo(0,0)"><span class="ni">🏠</span>Home</button>
+  <button class="mob-nb" onclick="document.getElementById('methods').scrollIntoView({{behavior:'smooth'}})"><span class="ni">⚡</span>Methods</button>
+  <button class="mob-nb" onclick="openSidebar()"><span class="ni">☰</span>Menu</button>
+  <button class="mob-nb" onclick="document.getElementById('types').scrollIntoView({{behavior:'smooth'}})"><span class="ni">📐</span>Types</button>
+  <button class="mob-nb" onclick="document.getElementById('globalSearch').focus();document.getElementById('globalSearch').select()"><span class="ni">🔍</span>Search</button>
+</nav>
 
 <footer class="footer">
   <div style="display:flex;align-items:center;gap:10px">
     <div class="logo-icon" style="width:32px;height:32px;font-size:16px">🦀</div>
-    <div>
-      <div style="font-size:14px;font-weight:700">tgbotrs v0.1.4</div>
-      <div style="font-size:12px;color:var(--text-muted)">Developed by <a href="https://github.com/ankit-chaubey" target="_blank" style="color:var(--accent)">Ankit Chaubey</a></div>
-    </div>
+    <div><div style="font-size:14px;font-weight:700">tgbotrs v{CRATE_VERSION}</div><div style="font-size:12px;color:var(--text-muted)">By <a href="https://github.com/ankit-chaubey" target="_blank" style="color:var(--accent)">Ankit Chaubey</a></div></div>
   </div>
-  <div style="font-size:13px;color:var(--text-muted)">Telegram Bot API 9.4 · {S["methods"]} methods · {S["types"]} types · MIT License</div>
+  <div style="font-size:12px;color:var(--text-muted)">Telegram Bot API 9.4 · {S["methods"]} methods · {S["types"]} types · MIT</div>
   <div class="footer-links">
     <a href="https://github.com/ankit-chaubey/tgbotrs" target="_blank">GitHub</a>
     <a href="https://crates.io/crates/tgbotrs" target="_blank">crates.io</a>
@@ -1158,241 +895,170 @@ let wait_secs  = error.flood_wait_seconds(); // Option&lt;i64&gt;</code></pre>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
-// ─── SEARCH INDEX ────────────────────────────────────────────────────────────
-const IDX = {{SEARCH_INDEX_PLACEHOLDER}};
-
-// ─── THEME ──────────────────────────────────────────────────────────────────
-function setTheme(t) {{
-  document.documentElement.setAttribute('data-theme', t);
-  localStorage.setItem('tg-theme', t);
-  document.querySelectorAll('.th-btn[data-t]').forEach(b => {{
-    b.classList.toggle('on', b.dataset.t === t);
-  }});
+const IDX={{SEARCH_INDEX_PLACEHOLDER}};
+// Theme (apply early, no flash)
+(function(){{const t=localStorage.getItem('tg-theme')||'amoled';document.documentElement.setAttribute('data-theme',t);}})();
+function setTheme(t){{
+  document.documentElement.setAttribute('data-theme',t);
+  localStorage.setItem('tg-theme',t);
+  document.querySelectorAll('.th-btn[data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.querySelectorAll('.mob-topt[data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  const icons={{light:'☀️',dark:'🌙',amoled:'⬛'}};
+  document.getElementById('mobFab').textContent=icons[t]||'🎨';
+  document.getElementById('mobTP').classList.remove('open');
 }}
-// Apply before DOM ready (avoids flash)
-document.documentElement.setAttribute('data-theme', localStorage.getItem('tg-theme') || 'amoled');
-document.addEventListener('DOMContentLoaded', () => {{
-  setTheme(localStorage.getItem('tg-theme') || 'amoled');
-  document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+document.addEventListener('DOMContentLoaded',()=>{{
+  setTheme(localStorage.getItem('tg-theme')||'amoled');
+  document.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
 }});
-
-// ─── COPY ────────────────────────────────────────────────────────────────────
-function copyCode(btn) {{
-  let el = btn, pre = null;
-  for (let i=0; i<8; i++) {{
-    el = el.parentElement; if (!el) break;
-    pre = el.querySelector('pre'); if (pre) break;
-  }}
-  const text = pre ? pre.innerText : '';
-  const orig = btn.textContent;
-  navigator.clipboard.writeText(text.trim()).then(() => {{
-    btn.textContent = '✅ Copied!'; btn.classList.add('copied');
-    setTimeout(() => {{ btn.textContent = orig; btn.classList.remove('copied'); }}, 2000);
-  }}).catch(() => {{
-    const ta = document.createElement('textarea');
-    ta.value = text.trim(); document.body.appendChild(ta);
-    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-    btn.textContent = '✅ Copied!';
-    setTimeout(() => {{ btn.textContent = orig; }}, 2000);
+function toggleMobTheme(){{document.getElementById('mobTP').classList.toggle('open');}}
+document.addEventListener('click',e=>{{
+  const fab=document.getElementById('mobFab'),tp=document.getElementById('mobTP');
+  if(!fab.contains(e.target)&&!tp.contains(e.target))tp.classList.remove('open');
+}});
+function openSidebar(){{document.getElementById('sidebar').classList.add('open');document.getElementById('sbOverlay').classList.add('open');document.body.style.overflow='hidden';}}
+function closeSidebar(){{document.getElementById('sidebar').classList.remove('open');document.getElementById('sbOverlay').classList.remove('open');document.body.style.overflow='';}}
+function copyCode(btn){{
+  let el=btn,pre=null;
+  for(let i=0;i<8;i++){{el=el.parentElement;if(!el)break;pre=el.querySelector('pre');if(pre)break;}}
+  const text=pre?pre.innerText:'',orig=btn.textContent;
+  navigator.clipboard.writeText(text.trim()).then(()=>{{
+    btn.textContent='✅ Copied!';btn.classList.add('copied');
+    setTimeout(()=>{{btn.textContent=orig;btn.classList.remove('copied');}},2000);
+  }}).catch(()=>{{
+    const ta=document.createElement('textarea');ta.value=text.trim();document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    btn.textContent='✅ Copied!';setTimeout(()=>btn.textContent=orig,2000);
   }});
 }}
-
-// ─── SIDEBAR TOGGLE ──────────────────────────────────────────────────────────
-function toggleCat(btn) {{
-  const id = btn.dataset.catId;
-  const panel = document.getElementById('sidebar-' + id);
-  if (!panel) return;
-  const open = panel.classList.contains('collapsed');
-  panel.classList.toggle('collapsed', !open);
-  btn.classList.toggle('open', open);
+function toggleCard(header){{
+  const card=header.closest('.method-card'),body=card.querySelector('.method-body');
+  const isOpen=card.classList.contains('expanded');
+  card.classList.toggle('expanded',!isOpen);body.classList.toggle('collapsed-body',isOpen);
 }}
-
-// ─── TABS ────────────────────────────────────────────────────────────────────
-function showTab(id, btn) {{
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  btn.classList.add('active');
+function toggleCat(btn){{
+  const id=btn.dataset.catId,panel=document.getElementById('sidebar-'+id);
+  if(!panel)return;
+  const open=panel.classList.contains('collapsed');
+  panel.classList.toggle('collapsed',!open);btn.classList.toggle('open',open);
 }}
-
-// ─── CATEGORY FILTER ─────────────────────────────────────────────────────────
-function filterCat(cat, btn) {{
-  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
-  let visible = 0;
-  document.querySelectorAll('.method-card').forEach(card => {{
-    const show = cat === 'all' || card.dataset.cat === cat;
-    card.classList.toggle('hidden', !show);
-    if (show) visible++;
+function showTab(id,btn){{
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');btn.classList.add('active');
+}}
+function filterCat(cat,btn){{
+  document.querySelectorAll('.fc2').forEach(c=>c.classList.remove('active'));btn.classList.add('active');
+  let visible=0;
+  document.querySelectorAll('.method-card').forEach(card=>{{
+    const show=cat==='all'||card.dataset.cat===cat;
+    card.classList.toggle('hidden',!show);if(show)visible++;
   }});
-  document.getElementById('resultsCount').textContent = visible + ' methods';
-  document.querySelectorAll('.cat-section').forEach(s => {{
-    s.style.display = s.querySelectorAll('.method-card:not(.hidden)').length > 0 ? '' : 'none';
-  }});
+  document.getElementById('resultsCount').textContent=visible+' methods';
+  document.querySelectorAll('.cat-section').forEach(s=>{{s.style.display=s.querySelectorAll('.method-card:not(.hidden)').length>0?'':'none';}});
   closeSearch();
 }}
-
-// ─── SEARCH DROPDOWN ─────────────────────────────────────────────────────────
-const inp  = document.getElementById('globalSearch');
-const drop = document.getElementById('searchDrop');
-const list = document.getElementById('sdList');
-const head = document.getElementById('sdHead');
-let focused = -1;
-
-function positionDrop() {{
-  const r = document.getElementById('searchOuter').getBoundingClientRect();
-  drop.style.top   = (r.bottom + 5) + 'px';
-  drop.style.left  = Math.max(8, r.left) + 'px';
-  drop.style.width = Math.max(440, r.width) + 'px';
+const inp=document.getElementById('globalSearch'),drop=document.getElementById('searchDrop'),list=document.getElementById('sdList'),head=document.getElementById('sdHead');
+let focused=-1;
+function positionDrop(){{
+  const r=document.getElementById('searchOuter').getBoundingClientRect(),mob=window.innerWidth<600;
+  if(mob){{drop.style.top=(r.bottom+4)+'px';drop.style.left='8px';drop.style.right='8px';drop.style.width='auto';}}
+  else{{drop.style.top=(r.bottom+5)+'px';drop.style.left=Math.max(8,r.left)+'px';drop.style.width=Math.max(420,r.width)+'px';}}
 }}
-function openSearch()  {{ positionDrop(); drop.classList.add('open'); }}
-function closeSearch() {{ drop.classList.remove('open'); focused = -1; }}
-
-function hl(str, q) {{
-  if (!q) return str;
-  const i = str.toLowerCase().indexOf(q.toLowerCase());
-  if (i < 0) return str;
-  return str.slice(0,i)+'<mark>'+str.slice(i,i+q.length)+'</mark>'+str.slice(i+q.length);
+function openSearch(){{positionDrop();drop.classList.add('open');}}
+function closeSearch(){{drop.classList.remove('open');focused=-1;}}
+function hl(str,q){{if(!q)return str;const i=str.toLowerCase().indexOf(q.toLowerCase());if(i<0)return str;return str.slice(0,i)+'<mark>'+str.slice(i,i+q.length)+'</mark>'+str.slice(i+q.length);}}
+function renderResults(q){{
+  const ql=q.toLowerCase(),all=IDX.filter(m=>m.n.includes(ql)||m.d.toLowerCase().includes(ql)),res=all.slice(0,20);
+  head.textContent='Methods — '+all.length+' result'+(all.length!==1?'s':'');
+  if(!res.length){{list.innerHTML='<div class="sd-empty">No methods match "<b>'+q+'</b>"</div>';}}
+  else{{list.innerHTML=res.map(m=>`<div class="sd-row" data-anchor="method-${{m.n.replace(/_/g,'-')}}" onclick="goTo('method-${{m.n.replace(/_/g,'-')}}')"><span class="sd-dot" style="background:${{m.col}}"></span><span class="sd-name">${{hl('bot.'+m.n+'()',q)}}</span><span class="sd-doc">${{hl(m.d,q)}}</span><span class="sd-cat">${{m.c}}</span></div>`).join('');}}
+  focused=-1;
 }}
-
-function renderResults(q) {{
-  const ql = q.toLowerCase();
-  const all = IDX.filter(m => m.n.includes(ql) || m.d.toLowerCase().includes(ql));
-  const res = all.slice(0, 12);
-  head.textContent = 'Methods — ' + all.length + ' result' + (all.length!==1?'s':'');
-  if (!res.length) {{
-    list.innerHTML = '<div class="sd-empty">No methods match "<b>'+q+'</b>"</div>';
-  }} else {{
-    list.innerHTML = res.map(m => {{
-      const anchor = m.n.replace(/_/g, '-');
-      return `<div class="sd-row" data-anchor="${{anchor}}" onclick="goTo('${{anchor}}')">
-        <span class="sd-dot" style="background:${{m.col}}"></span>
-        <span class="sd-name">${{hl('bot.'+m.n+'()',q)}}</span>
-        <span class="sd-doc">${{hl(m.d,q)}}</span>
-        <span class="sd-cat">${{m.c}}</span>
-      </div>`;
-    }}).join('');
-  }}
-  focused = -1;
-}}
-
-function goTo(anchor) {{
-  closeSearch();
-  inp.value = '';
-  restoreAll();
-  const el = document.getElementById(anchor);
-  if (el) {{
-    el.scrollIntoView({{behavior:'smooth', block:'start'}});
-    el.style.outline = '2px solid var(--accent)';
-    el.style.outlineOffset = '3px';
-    setTimeout(() => {{ el.style.outline=''; el.style.outlineOffset=''; }}, 1200);
+function goTo(anchor){{
+  closeSearch();inp.value='';restoreAll();closeSidebar();
+  const el=document.getElementById(anchor);
+  if(el){{
+    if(!el.classList.contains('expanded')){{el.classList.add('expanded');el.querySelector('.method-body')?.classList.remove('collapsed-body');}}
+    el.scrollIntoView({{behavior:'smooth',block:'start'}});
+    el.style.outline='2px solid var(--accent)';el.style.outlineOffset='3px';
+    setTimeout(()=>{{el.style.outline='';el.style.outlineOffset='';}},1400);
   }}
 }}
-
-function restoreAll() {{
-  document.querySelectorAll('.method-card').forEach(c => c.classList.remove('hidden'));
-  document.querySelectorAll('.cat-section').forEach(s => s.style.display='');
-  document.getElementById('resultsCount').textContent = '165 methods';
-  document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
+function restoreAll(){{
+  document.querySelectorAll('.method-card').forEach(c=>c.classList.remove('hidden'));
+  document.querySelectorAll('.cat-section').forEach(s=>s.style.display='');
+  document.getElementById('resultsCount').textContent=IDX.length+' methods';
+  document.querySelectorAll('.fc2').forEach((c,i)=>c.classList.toggle('active',i===0));
 }}
-
-inp.addEventListener('focus', () => {{ if (inp.value.trim()) openSearch(); }});
-inp.addEventListener('input', function() {{
-  const q = this.value.trim();
-  if (!q) {{ closeSearch(); restoreAll(); return; }}
-  renderResults(q);
-  openSearch();
-  const ql = q.toLowerCase();
-  let visible = 0;
-  document.querySelectorAll('.method-card').forEach(card => {{
-    const match = card.dataset.name.includes(ql) ||
-      (card.querySelector('.method-doc')?.textContent||'').toLowerCase().includes(ql);
-    card.classList.toggle('hidden', !match);
-    if (match) visible++;
+inp.addEventListener('focus',()=>{{if(inp.value.trim())openSearch();}});
+inp.addEventListener('input',function(){{
+  const q=this.value.trim();if(!q){{closeSearch();restoreAll();return;}}
+  renderResults(q);openSearch();
+  const ql=q.toLowerCase();let visible=0;
+  document.querySelectorAll('.method-card').forEach(card=>{{
+    const match=card.dataset.name.includes(ql)||(card.querySelector('.method-doc')?.textContent||'').toLowerCase().includes(ql);
+    card.classList.toggle('hidden',!match);if(match)visible++;
   }});
-  document.getElementById('resultsCount').textContent = visible + ' methods';
-  document.querySelectorAll('.cat-section').forEach(s => {{
-    s.style.display = s.querySelectorAll('.method-card:not(.hidden)').length > 0 ? '' : 'none';
+  document.getElementById('resultsCount').textContent=visible+' methods';
+  document.querySelectorAll('.cat-section').forEach(s=>{{s.style.display=s.querySelectorAll('.method-card:not(.hidden)').length>0?'':'none';}});
+  document.querySelectorAll('.fc2').forEach((c,i)=>c.classList.toggle('active',i===0));
+}});
+document.addEventListener('click',e=>{{if(!inp.contains(e.target)&&!drop.contains(e.target))closeSearch();}});
+document.addEventListener('keydown',e=>{{
+  if((e.ctrlKey||e.metaKey)&&e.key==='k'){{e.preventDefault();inp.focus();inp.select();openSearch();}}
+  if(e.key==='Escape'){{closeSearch();closeSidebar();document.getElementById('mobTP').classList.remove('open');}}
+  if(drop.classList.contains('open')){{
+    const rows=list.querySelectorAll('.sd-row');
+    if(e.key==='ArrowDown'){{e.preventDefault();rows.forEach(r=>r.classList.remove('focus'));focused=Math.min(rows.length-1,focused+1);rows[focused]?.classList.add('focus');rows[focused]?.scrollIntoView({{block:'nearest'}});}}
+    if(e.key==='ArrowUp'){{e.preventDefault();rows.forEach(r=>r.classList.remove('focus'));focused=Math.max(0,focused-1);rows[focused]?.classList.add('focus');rows[focused]?.scrollIntoView({{block:'nearest'}});}}
+    if(e.key==='Enter'){{const f=list.querySelector('.sd-row.focus');if(f)goTo(f.dataset.anchor);}}
+  }}
+}});
+window.addEventListener('resize',()=>{{if(drop.classList.contains('open'))positionDrop();}});
+// Sidebar search filter
+document.getElementById('sbSearch').addEventListener('input',function(){{
+  const q=this.value.toLowerCase();
+  document.querySelectorAll('.sidebar-method').forEach(a=>{{
+    const match=!q||a.textContent.toLowerCase().includes(q);
+    a.style.display=match?'':'none';
+    if(match&&q){{const p=a.closest('.cat-methods');if(p){{p.classList.remove('collapsed');p.previousElementSibling?.classList.add('open');}}}}
   }});
-  document.querySelectorAll('.filter-chip').forEach((c,i) => c.classList.toggle('active', i===0));
 }});
-
-document.addEventListener('click', e => {{
-  if (!inp.contains(e.target) && !drop.contains(e.target)) closeSearch();
-}});
-document.addEventListener('keydown', e => {{
-  if ((e.ctrlKey||e.metaKey) && e.key==='k') {{ e.preventDefault(); inp.focus(); inp.select(); }}
-  if (e.key==='Escape') closeSearch();
-  if (drop.classList.contains('open')) {{
-    const rows = list.querySelectorAll('.sd-row');
-    if (e.key==='ArrowDown') {{
-      e.preventDefault();
-      rows.forEach(r=>r.classList.remove('focus'));
-      focused = Math.min(rows.length-1, focused+1);
-      rows[focused]?.classList.add('focus');
-      rows[focused]?.scrollIntoView({{block:'nearest'}});
+// Active sidebar highlight
+const obs=new IntersectionObserver(entries=>{{
+  entries.forEach(e=>{{
+    if(e.isIntersecting){{
+      const id=e.target.id;
+      document.querySelectorAll('.sidebar-method').forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+id));
     }}
-    if (e.key==='ArrowUp') {{
-      e.preventDefault();
-      rows.forEach(r=>r.classList.remove('focus'));
-      focused = Math.max(0, focused-1);
-      rows[focused]?.classList.add('focus');
-      rows[focused]?.scrollIntoView({{block:'nearest'}});
-    }}
-    if (e.key==='Enter') {{
-      const f = list.querySelector('.sd-row.focus');
-      if (f) goTo(f.dataset.anchor);
+  }});
+}},{{rootMargin:'-5% 0px -70% 0px'}});
+document.querySelectorAll('.method-card').forEach(c=>obs.observe(c));
+// Hash navigation
+window.addEventListener('load',()=>{{
+  if(location.hash){{
+    const el=document.querySelector(location.hash);
+    if(el){{
+      if(el.classList.contains('method-card')&&!el.classList.contains('expanded')){{
+        el.classList.add('expanded');el.querySelector('.method-body')?.classList.remove('collapsed-body');
+      }}
+      setTimeout(()=>el.scrollIntoView({{behavior:'smooth',block:'start'}}),250);
     }}
   }}
 }});
-window.addEventListener('resize', () => {{ if (drop.classList.contains('open')) positionDrop(); }});
-
-// ─── SIDEBAR ACTIVE HIGHLIGHT ────────────────────────────────────────────────
-const obs = new IntersectionObserver(entries => {{
-  entries.forEach(e => {{
-    if (e.isIntersecting) {{
-      const id = e.target.id;
-      document.querySelectorAll('.sidebar-method').forEach(a => {{
-        const active = a.getAttribute('href') === '#'+id;
-        a.style.color = active ? 'var(--accent)' : '';
-        a.style.fontWeight = active ? '600' : '';
-      }});
-    }}
-  }});
-}}, {{ rootMargin: '-8% 0px -70% 0px' }});
-document.querySelectorAll('.method-card').forEach(c => obs.observe(c));
 </script>
 </body>
 </html>'''
 
+HTML=HTML.replace('{SEARCH_INDEX_PLACEHOLDER}',_search_json)
+(SITE_DIR/"index.html").write_text(HTML,encoding="utf-8")
+(SITE_DIR/"CNAME").write_text(CUSTOM_DOMAIN,encoding="utf-8")
 
-# Build search index for dropdown
-import json as _json
-_search_idx = []
-for _m in methods:
-    _cat = categorize(_m['name'])
-    _color = {
-        'Sending Messages':'#818cf8','Getting Info':'#38bdf8','Configuration':'#34d399',
-        'Editing':'#fbbf24','Deletion':'#f87171','Forwarding and Copying':'#a78bfa',
-        'Answering Queries':'#2dd4bf','Chat Administration':'#fb923c',
-        'Invite and Membership':'#c084fc','Pinning':'#f472b6','Stickers':'#a3e635',
-        'Forum Topics':'#67e8f9','Updates and Webhook':'#818cf8','Games':'#4ade80',
-        'Payments and Stars':'#fcd34d','Stories':'#fb7185','Business':'#94a3b8','Other':'#6b7280',
-    }.get(_cat,'#7c6af7')
-    _search_idx.append({'n':_m['name'],'d':_m['doc'][:90],'c':_cat,'col':_color})
-_search_json = _json.dumps(_search_idx, separators=(',',':'))
-
-print("🏗️  Assembling final page...")
-html = assemble(method_cards, sidebar_html, types_html, enums_html, stats)
-html = html.replace('{SEARCH_INDEX_PLACEHOLDER}', _search_json)
-
-output_path = SITE_DIR / "index.html"
-output_path.write_text(html, encoding="utf-8")
-
-size_kb = len(html.encode()) / 1024
-print(f"\n✅ Generated: {output_path}")
+size_kb=len(HTML.encode())/1024
+print(f"\n✅ Generated: {SITE_DIR/'index.html'}")
 print(f"   Size: {size_kb:.1f} KB")
-print(f"   Methods: {stats['methods']}")
-print(f"   Types: {stats['types']}")
-print(f"   Enums: {stats['enums']}")
-print(f"\n🎉 Documentation generation complete!")
+print(f"   Methods: {S['methods']}")
+print(f"   Types: {S['types']}")
+print(f"   Enums: {S['enums']}")
+print(f"✅ CNAME: {CUSTOM_DOMAIN}")
+print(f"\n🌐 Live at: https://{CUSTOM_DOMAIN}")
