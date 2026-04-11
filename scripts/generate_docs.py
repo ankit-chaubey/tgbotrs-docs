@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
 """
-tgbotrs Documentation Generator  ·  v2 (improved)
-===================================================
-Parses tgbotrs Rust source files and generates a complete,
-interactive, mobile-first documentation website.
-
-  • Liquid-glass premium design
-  • ALL fields shown — no truncation
-  • Mobile-first: hamburger sidebar, bottom nav, theme toggle
-  • Custom domain: auto-generates CNAME
-  • Lowest supported version: 0.1.4
-
-Developed by Ankit Chaubey <ankitchaubey.dev@gmail.com>
-GitHub: https://github.com/ankit-chaubey/tgbotrs
+tgbotrs Documentation Generator
+Parses tgbotrs Rust source files and generates a single-file
+self-contained documentation website.
 
 Usage:
     python3 scripts/generate_docs.py
 
 Output:
-    site/index.html  — full self-contained docs site
-    site/CNAME       — custom domain file for GitHub Pages
+    site/index.html  -- full docs site (single HTML file)
+    site/CNAME       -- custom domain file for GitHub Pages
 """
 
 import re
@@ -27,7 +17,7 @@ import json
 import os
 from pathlib import Path
 
-CRATE_VERSION  = "0.1.4"
+CRATE_VERSION  = "0.2"
 CUSTOM_DOMAIN  = "tgbotrs.ankitchaubey.in"
 
 SCRIPT_DIR = Path(__file__).parent
@@ -36,20 +26,26 @@ SRC_DIR    = ROOT_DIR / "tgbotrs" / "src"
 SITE_DIR   = ROOT_DIR / "site"
 SITE_DIR.mkdir(exist_ok=True)
 
-print("📂 Source dir:", SRC_DIR)
-print("📂 Site dir:",   SITE_DIR)
+print("Source dir:", SRC_DIR)
+print("Site dir:",   SITE_DIR)
 
 def load(path):
     try:
         return Path(path).read_text(encoding="utf-8")
     except FileNotFoundError:
-        print(f"⚠️  File not found: {path}")
+        print(f"Warning: file not found: {path}")
         return ""
 
-gen_methods = load(SRC_DIR / "gen_methods.rs")
-gen_types   = load(SRC_DIR / "gen_types.rs")
-hand_types  = load(SRC_DIR / "types.rs")
-print("✅ Source files loaded")
+gen_methods  = load(SRC_DIR / "gen_methods.rs")
+gen_types    = load(SRC_DIR / "gen_types.rs")
+hand_types   = load(SRC_DIR / "types.rs")
+src_bot      = load(SRC_DIR / "bot.rs")
+src_client   = load(SRC_DIR / "client.rs")
+src_sync     = load(SRC_DIR / "client_sync.rs")
+src_entities = load(SRC_DIR / "entities.rs")
+src_polling  = load(SRC_DIR / "polling.rs")
+src_webhook  = load(SRC_DIR / "webhook.rs")
+print("Source files loaded")
 
 # ── Parse Methods ───────────────────────────────────────────────────────────────
 def parse_methods(content):
@@ -215,14 +211,14 @@ def build_method_cards(categories,params_map,examples):
             opt_html=''
             if has_opt:
                 fields=params_map[name].get('fields',[]); struct_name=params_map[name]['struct']
-                # ALL FIELDS — no truncation
+                # ALL FIELDS (no truncation)
                 rows=''.join(
                     f'<tr><td class="field-name">{h(f["name"])}</td><td class="field-type">{h(f["type"])}</td><td class="field-doc">{h(f.get("doc",""))}</td></tr>'
                     for f in fields
                 )
                 opt_html=f'''
             <div class="optional-section">
-              <div class="section-label">Optional params — <code>{h(struct_name)}</code><span class="field-count">{len(fields)} fields</span></div>
+              <div class="section-label">Optional params: <code>{h(struct_name)}</code><span class="field-count">{len(fields)} fields</span></div>
               <div class="table-wrap"><table class="fields-table"><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>{rows}</tbody></table></div>
             </div>'''
             code=h(examples.get(name,'// example not available'))
@@ -303,32 +299,32 @@ def build_enums_html(enums_list):
     return html
 
 # ── Main ────────────────────────────────────────────────────────────────────────
-print("\n🔍 Parsing methods...")
+print("\nParsing methods...")
 methods=parse_methods(gen_methods)
 print(f"   Found {len(methods)} methods")
 
-print("🔍 Parsing param structs...")
+print("Parsing param structs...")
 params_map=parse_param_structs(gen_methods)
 print(f"   Found {len(params_map)} optional param structs")
 
-print("🔍 Parsing types...")
+print("Parsing types...")
 types_structs=parse_structs(gen_types); types_enums=parse_enums(gen_types)
 hand_structs=parse_structs(hand_types); hand_enums=parse_enums(hand_types)
 all_structs=types_structs+hand_structs; all_enums=types_enums+hand_enums
 print(f"   Found {len(all_structs)} structs, {len(all_enums)} enums")
 
-print("🔧 Generating code examples...")
+print("Generating code examples...")
 examples={m['name']:generate_example(m,params_map) for m in methods}
 print(f"   Generated {len(examples)} examples")
 
-print("📂 Categorizing methods...")
+print("Categorizing methods...")
 categories={}
 for m in methods:
     cat=categorize(m['name']); categories.setdefault(cat,[]).append(m)
 for cat,ms in sorted(categories.items(),key=lambda x:len(x[1]),reverse=True):
     print(f"   {cat}: {len(ms)}")
 
-print("\n🏗️  Building HTML fragments...")
+print("\nBuilding HTML fragments...")
 method_cards=build_method_cards(categories,params_map,examples)
 sidebar_html=build_sidebar(categories)
 types_html=build_types_html(all_structs)
@@ -352,8 +348,8 @@ HTML = f'''<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-  <title>tgbotrs v{CRATE_VERSION} — Telegram Bot API for Rust</title>
-  <meta name="description" content="Complete docs for tgbotrs — {S["methods"]} methods, {S["types"]} types, fully async. By Ankit Chaubey.">
+  <title>tgbotrs v{CRATE_VERSION}: Telegram Bot API for Rust</title>
+  <meta name="description" content="Complete docs for tgbotrs: {S["methods"]} methods, {S["types"]} types, fully async. By Ankit Chaubey.">
   <meta property="og:url" content="https://{CUSTOM_DOMAIN}">
   <link rel="canonical" href="https://{CUSTOM_DOMAIN}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -644,6 +640,9 @@ button{{cursor:pointer;border:none;background:none;font-family:inherit;color:inh
   <a class="sb-link" href="#errors" onclick="closeSidebar()"><span class="dot"></span>Error Handling</a>
   <a class="sb-link" href="#polling" onclick="closeSidebar()"><span class="dot"></span>Long Polling</a>
   <a class="sb-link" href="#webhook" onclick="closeSidebar()"><span class="dot"></span>Webhook</a>
+  <a class="sb-link" href="#framework" onclick="closeSidebar()"><span class="dot"></span>Framework</a>
+  <a class="sb-link" href="#syncbot" onclick="closeSidebar()"><span class="dot"></span>Sync Client</a>
+  <a class="sb-link" href="#custom-client" onclick="closeSidebar()"><span class="dot"></span>Custom Client</a>
   <div class="sb-div"></div>
   <div class="sb-ttl">Methods by Category</div>
   {sidebar_html}
@@ -653,9 +652,9 @@ button{{cursor:pointer;border:none;background:none;font-family:inherit;color:inh
 <div class="hero">
   <div class="hero-bg"></div>
   <div class="hero-content">
-    <div class="hero-badge">🦀 Telegram Bot API 9.4 · Fully Auto-Generated</div>
+    <div class="hero-badge">🦀 Telegram Bot API 9.4 · Auto-Generated · v{CRATE_VERSION}</div>
     <h1>The <span class="grad">complete</span> Rust<br>Telegram Bot library</h1>
-    <p class="hero-desc"><strong>tgbotrs</strong> gives you every Telegram Bot API method and type — fully typed, fully async, auto-generated from the official spec. Built with Tokio. Lowest supported: <strong>v{CRATE_VERSION}</strong>.</p>
+    <p class="hero-desc"><strong>tgbotrs</strong> gives you every Telegram Bot API method and type, fully typed, fully async, auto-generated from the official spec. Built with Tokio. Rust 1.75+.</p>
     <div class="hero-stats">
       <div class="stat-item"><span class="stat-num">{S["methods"]}</span><span class="stat-label">Methods</span></div>
       <div class="stat-item"><span class="stat-num">{S["types"]}</span><span class="stat-label">Types</span></div>
@@ -675,12 +674,12 @@ button{{cursor:pointer;border:none;background:none;font-family:inherit;color:inh
   <h2 class="sec-h2">🚀 Quick Start</h2>
   <p class="sec-sub">Get your first bot running in under 2 minutes.</p>
   <div style="display:flex;flex-direction:column;gap:14px;max-width:800px">
-    <div class="ic"><div class="ic-t">Step 1 — Get your bot token</div><div style="font-size:13px;color:var(--text-dim)">Chat with <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent2)">@BotFather</a> → /newbot → copy your token.</div></div>
-    <div class="ic"><div class="ic-t">Step 2 — Cargo.toml</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <div class="ic"><div class="ic-t">Step 1: Get your bot token</div><div style="font-size:13px;color:var(--text-dim)">Chat with <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent2)">@BotFather</a> → /newbot → copy your token.</div></div>
+    <div class="ic"><div class="ic-t">Step 2: Cargo.toml</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
     <pre class="code-block"><code class="language-toml">[dependencies]
 tgbotrs = "{CRATE_VERSION}"
 tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
-    <div class="ic"><div class="ic-t">Step 3 — src/main.rs</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <div class="ic"><div class="ic-t">Step 3: src/main.rs</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
     <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, Poller, UpdateHandler}};
 
 #[tokio::main]
@@ -699,7 +698,7 @@ async fn main() {{
     }});
     Poller::new(bot, handler).timeout(30).start().await.unwrap();
 }}</code></pre></div>
-    <div class="ic"><div class="ic-t">Step 4 — Run</div><pre class="code-block"><code class="language-bash">cargo run</code></pre></div>
+    <div class="ic"><div class="ic-t">Step 4: Run</div><pre class="code-block"><code class="language-bash">cargo run</code></pre></div>
   </div>
 </section>
 
@@ -715,7 +714,14 @@ tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
     <pre class="code-block"><code class="language-toml">[dependencies]
 tgbotrs = {{ version = "{CRATE_VERSION}", features = ["webhook"] }}
 tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
-    <div class="ic"><div class="ic-t">Dependencies Included</div><div style="font-size:13px;color:var(--text-dim);line-height:2">✅ reqwest<br>✅ serde + serde_json<br>✅ tokio<br>✅ thiserror<br>🔌 axum (webhook only)</div></div>
+    <div class="ic"><div class="ic-t">With Sync Client (ureq)</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-toml">[dependencies]
+tgbotrs = {{ version = "{CRATE_VERSION}", features = ["client-ureq"] }}</code></pre></div>
+    <div class="ic"><div class="ic-t">All Features</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">Cargo.toml</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-toml">[dependencies]
+tgbotrs = {{ version = "{CRATE_VERSION}", features = ["webhook", "bot-mapping", "client-ureq"] }}
+tokio   = {{ version = "1", features = ["full"] }}</code></pre></div>
+    <div class="ic"><div class="ic-t">Included Dependencies</div><div style="font-size:13px;color:var(--text-dim);line-height:2">reqwest (async HTTP)<br>serde + serde_json<br>tokio<br>thiserror<br>axum (webhook feature)<br>ureq (client-ureq feature)</div></div>
     <div class="ic"><div class="ic-t">Env-based Token</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
     <pre class="code-block"><code class="language-rust">let token = std::env::var("BOT_TOKEN").expect("BOT_TOKEN not set");
 let bot = Bot::new(token).await?;</code></pre></div>
@@ -724,23 +730,26 @@ let bot = Bot::new(token).await?;</code></pre></div>
 
 <section class="sec" id="features">
   <h2 class="sec-h2">✨ Features</h2>
-  <p class="sec-sub">Everything you need to build powerful Telegram bots in Rust.</p>
+  <p class="sec-sub">What tgbotrs includes out of the box.</p>
   <div class="fg">
-    <div class="fc"><div class="fi">⚡</div><div class="ft">Fully Async</div><div class="fd">Built on Tokio. Handle thousands of concurrent updates.</div></div>
+    <div class="fc"><div class="fi">⚡</div><div class="ft">Fully Async</div><div class="fd">Built on Tokio. Handle concurrent updates with one spawned task per update.</div></div>
     <div class="fc"><div class="fi">🔒</div><div class="ft">Strongly Typed</div><div class="fd">Every method, parameter and response is strongly typed. Compile-time safety.</div></div>
-    <div class="fc"><div class="fi">🤖</div><div class="ft">Auto-Generated</div><div class="fd">All {S["methods"]} methods and {S["types"]} types auto-generated from the official spec.</div></div>
+    <div class="fc"><div class="fi">🤖</div><div class="ft">Auto-Generated</div><div class="fd">All {S["methods"]} methods and {S["types"]} types generated from the official Telegram spec.</div></div>
     <div class="fc"><div class="fi">🏗️</div><div class="ft">Builder Pattern</div><div class="fd">Chain optional params like <code style="background:var(--glass);padding:1px 5px;border-radius:3px">.parse_mode("HTML")</code>.</div></div>
-    <div class="fc"><div class="fi">🪝</div><div class="ft">Built-in Webhook</div><div class="fd">Optional axum-based webhook server. One line to switch from polling.</div></div>
-    <div class="fc"><div class="fi">📁</div><div class="ft">File Uploads</div><div class="fd">Upload by path, URL, or bytes. InputFile handles multipart transparently.</div></div>
-    <div class="fc"><div class="fi">🎯</div><div class="ft">ChatId Flexibility</div><div class="fd">Pass IDs as i64, &str, or @username — all conversions automatic.</div></div>
-    <div class="fc"><div class="fi">🎮</div><div class="ft">All Keyboard Types</div><div class="fd">InlineKeyboard, ReplyKeyboard, ForceReply — all four types supported.</div></div>
-    <div class="fc"><div class="fi">🔧</div><div class="ft">Custom API Server</div><div class="fd">Use <code style="background:var(--glass);padding:1px 5px;border-radius:3px">Bot::with_api_url()</code> to point at your own server.</div></div>
+    <div class="fc"><div class="fi">🪝</div><div class="ft">Built-in Webhook</div><div class="fd">Optional axum-based <code style="background:var(--glass);padding:1px 5px;border-radius:3px">WebhookServer</code>. Same handler interface as <code style="background:var(--glass);padding:1px 5px;border-radius:3px">Poller</code>.</div></div>
+    <div class="fc"><div class="fi">🧩</div><div class="ft">Framework / Dispatcher</div><div class="fd"><code style="background:var(--glass);padding:1px 5px;border-radius:3px">Dispatcher</code> with <code style="background:var(--glass);padding:1px 5px;border-radius:3px">CommandHandler</code>, <code style="background:var(--glass);padding:1px 5px;border-radius:3px">MessageHandler</code>, filters, and conversation state.</div></div>
+    <div class="fc"><div class="fi">📁</div><div class="ft">File Uploads</div><div class="fd">Upload by file_id, URL, or in-memory bytes. Multipart handled transparently.</div></div>
+    <div class="fc"><div class="fi">🎯</div><div class="ft">ChatId Flexibility</div><div class="fd">Pass IDs as i64, &amp;str, or @username. All conversions automatic.</div></div>
+    <div class="fc"><div class="fi">🔌</div><div class="ft">Pluggable HTTP Client</div><div class="fd">Swap in any <code style="background:var(--glass);padding:1px 5px;border-radius:3px">BotClient</code> impl — useful for unit tests or custom transports.</div></div>
+    <div class="fc"><div class="fi">🔄</div><div class="ft">Sync Client</div><div class="fd"><code style="background:var(--glass);padding:1px 5px;border-radius:3px">SyncBot</code> via <code style="background:var(--glass);padding:1px 5px;border-radius:3px">client-ureq</code> feature for scripts and CLI tools.</div></div>
+    <div class="fc"><div class="fi">🔧</div><div class="ft">Custom API Server</div><div class="fd">Use <code style="background:var(--glass);padding:1px 5px;border-radius:3px">Bot::with_api_url()</code> to point at a local Bot API server.</div></div>
+    <div class="fc"><div class="fi">🏷️</div><div class="ft">Entity Parsing</div><div class="fd"><code style="background:var(--glass);padding:1px 5px;border-radius:3px">MessageEntityExt</code> decodes UTF-16 entity offsets correctly for all Unicode text.</div></div>
   </div>
 </section>
 
 <section class="sec" id="polling">
   <h2 class="sec-h2">🔄 Long Polling</h2>
-  <p class="sec-sub">Simplest way to receive updates — no external server needed.</p>
+  <p class="sec-sub">No external server needed.</p>
   <div style="max-width:800px">
     <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Polling with inline keyboard</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
     <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, Poller, UpdateHandler}};
@@ -825,7 +834,7 @@ async fn main() {{
 
 <section class="sec" id="types">
   <h2 class="sec-h2">📐 Types Reference</h2>
-  <p class="sec-sub">All {S["types"]} Telegram types — every field shown. See <a href="https://docs.rs/tgbotrs" target="_blank" style="color:var(--accent2)">docs.rs</a> for full rustdoc.</p>
+  <p class="sec-sub">All {S["types"]} Telegram types, every field shown. See <a href="https://docs.rs/tgbotrs" target="_blank" style="color:var(--accent2)">docs.rs</a> for full rustdoc.</p>
   <div class="tabs">
     <button class="tab active" onclick="showTab('structs',this)">Structs ({S["types"]})</button>
     <button class="tab" onclick="showTab('enums',this)">Enums ({S["enums"]})</button>
@@ -837,7 +846,7 @@ async fn main() {{
     <div style="display:flex;flex-direction:column;gap:14px;max-width:800px">
       <div class="err-sec"><div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">ChatId</div><p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Accepts numeric IDs or username strings.</p><pre class="code-block"><code class="language-rust">bot.send_message(123456789i64, "text", None).await?;
 bot.send_message("@mychannel", "text", None).await?;</code></pre></div>
-      <div class="err-sec"><div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">InputFile</div><p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Flexible file input — path, URL, or bytes.</p><pre class="code-block"><code class="language-rust">use tgbotrs::InputFile;
+      <div class="err-sec"><div style="font-size:16px;font-weight:700;margin-bottom:12px;font-family:'JetBrains Mono',monospace;color:var(--purple)">InputFile</div><p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Flexible file input: path, URL, or in-memory bytes.</p><pre class="code-block"><code class="language-rust">use tgbotrs::InputFile;
 let by_path  = InputFile::path("photo.jpg");
 let by_url   = InputFile::url("https://example.com/photo.jpg");
 let by_bytes = InputFile::bytes("photo.jpg", std::fs::read("photo.jpg").unwrap());</code></pre></div>
@@ -852,9 +861,9 @@ let by_bytes = InputFile::bytes("photo.jpg", std::fs::read("photo.jpg").unwrap()
     <div class="err-sec">
       <div style="font-size:15px;font-weight:700;margin-bottom:14px;font-family:'JetBrains Mono',monospace">BotError variants</div>
       <div class="ev"><div class="ev-name">BotError::Api {{ code, description, retry_after, migrate_to_chat_id }}</div><div class="ev-desc">Telegram returned ok=false. 429=flood, 403=blocked, 400=bad request.</div></div>
-      <div class="ev"><div class="ev-name">BotError::Http(reqwest::Error)</div><div class="ev-desc">Network error — connection refused, timeout, DNS failure.</div></div>
+      <div class="ev"><div class="ev-name">BotError::Http(reqwest::Error)</div><div class="ev-desc">Network error: connection refused, timeout, DNS failure.</div></div>
       <div class="ev"><div class="ev-name">BotError::Json(serde_json::Error)</div><div class="ev-desc">Failed to (de)serialize request or response.</div></div>
-      <div class="ev"><div class="ev-name">BotError::InvalidToken</div><div class="ev-desc">Token doesn't contain a colon — invalid format.</div></div>
+      <div class="ev"><div class="ev-name">BotError::InvalidToken</div><div class="ev-desc">Token does not contain a colon.</div></div>
     </div>
     <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Error handling patterns</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
     <pre class="code-block"><code class="language-rust">match bot.send_message(chat_id, text, None).await {{
@@ -864,6 +873,95 @@ let by_bytes = InputFile::bytes("photo.jpg", std::fs::read("photo.jpg").unwrap()
         tokio::time::sleep(std::time::Duration::from_secs(secs as u64)).await;
     }}
     Err(e) => eprintln!("Error: {{}}", e),
+}}</code></pre>
+  </div>
+</section>
+
+<section class="sec" id="framework">
+  <h2 class="sec-h2">🧩 Framework / Dispatcher</h2>
+  <p class="sec-sub">Structured handler routing with filters, groups, and conversation state. Recommended for non-trivial bots.</p>
+  <div style="display:flex;flex-direction:column;gap:14px;max-width:800px">
+    <div class="ic"><div class="ic-t">Command handler</div><div class="example-header" style="margin-bottom:8px"><span style="font-size:11px;color:var(--text-muted)">src/main.rs</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">use tgbotrs::{{Bot, CommandHandler, Dispatcher, DispatcherOpts, Updater}};
+use tgbotrs::framework::{{HandlerResult, Context}};
+
+async fn start(bot: Bot, ctx: Context) -> HandlerResult {{
+    if let Some(msg) = ctx.effective_message() {{
+        msg.reply(&bot, "Hello! 👋", None).await?;
+    }}
+    Ok(())
+}}
+
+async fn help(bot: Bot, ctx: Context) -> HandlerResult {{
+    if let Some(msg) = ctx.effective_message() {{
+        msg.reply(&bot, "Commands: /start /help", None).await?;
+    }}
+    Ok(())
+}}
+
+#[tokio::main]
+async fn main() {{
+    let bot = Bot::new("YOUR_BOT_TOKEN").await.unwrap();
+    let mut dp = Dispatcher::new(DispatcherOpts::default());
+    dp.add_handler(CommandHandler::new("start", start));
+    dp.add_handler(CommandHandler::new("help", help));
+    Updater::new(bot, dp).start_polling().await.unwrap();
+}}</code></pre></div>
+    <div class="ic"><div class="ic-t">Handler groups and filters</div><div class="example-header" style="margin-bottom:8px"><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">use tgbotrs::{{MessageHandler, FilterExt}};
+
+// Handlers in group 0 run before group 1.
+// Within a group, the first matching handler wins.
+dp.add_handler_to_group(
+    MessageHandler::new(handle_text).filter(|ctx| ctx.message().and_then(|m| m.text.as_deref()).map(|t| !t.starts_with('/')).unwrap_or(false)),
+    1,
+);</code></pre></div>
+  </div>
+</section>
+
+<section class="sec" id="syncbot">
+  <h2 class="sec-h2">🔄 Sync Client</h2>
+  <p class="sec-sub">Blocking, thread-based client for scripts and CLI tools. Enable with the <code style="background:var(--glass);padding:1px 6px;border-radius:4px">client-ureq</code> feature.</p>
+  <div style="max-width:800px">
+    <div class="example-header" style="margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--text-dim)">Cargo.toml + usage</span><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-toml"># Cargo.toml
+[dependencies]
+tgbotrs = {{ version = "{CRATE_VERSION}", features = ["client-ureq"] }}</code></pre>
+    <pre class="code-block" style="margin-top:10px"><code class="language-rust">use tgbotrs::client_sync::SyncBot;
+
+fn main() {{
+    let bot = SyncBot::new("YOUR_BOT_TOKEN");
+    let me: serde_json::Value = bot.call_sync("getMe", serde_json::Value::Null).unwrap();
+    println!("{{me}}");
+}}</code></pre>
+  </div>
+</section>
+
+<section class="sec" id="custom-client">
+  <h2 class="sec-h2">🔌 Custom HTTP Client</h2>
+  <p class="sec-sub">Implement <code style="background:var(--glass);padding:1px 6px;border-radius:4px">BotClient</code> to use a mock, proxy, or WASM-compatible transport. The main hook for unit testing.</p>
+  <div style="max-width:800px">
+    <div class="example-header" style="margin-bottom:8px"><button class="copy-btn" onclick="copyCode(this)">📋 Copy</button></div>
+    <pre class="code-block"><code class="language-rust">use async_trait::async_trait;
+use tgbotrs::{{Bot, BotError}};
+use tgbotrs::client::{{BotClient, FormPart}};
+
+#[derive(Debug)]
+struct MockClient;
+
+#[async_trait]
+impl BotClient for MockClient {{
+    async fn post_json(&self, _url: &str, _body: serde_json::Value) -> Result<bytes::Bytes, BotError> {{
+        Ok(bytes::Bytes::from(r#"{{"ok":true,"result":{{"id":42,"is_bot":true,"first_name":"Test","username":"testbot"}}}}"#))
+    }}
+    async fn post_form(&self, _url: &str, _parts: Vec<FormPart>) -> Result<bytes::Bytes, BotError> {{
+        Ok(bytes::Bytes::from(r#"{{"ok":true,"result":true}}"#))
+    }}
+}}
+
+fn main() {{
+    let bot = Bot::with_client("1234:TOKEN", "https://api.telegram.org", MockClient).unwrap();
+    // bot.me.id == 1234, no network call made
 }}</code></pre>
   </div>
 </section>
@@ -969,7 +1067,7 @@ function closeSearch(){{drop.classList.remove('open');focused=-1;}}
 function hl(str,q){{if(!q)return str;const i=str.toLowerCase().indexOf(q.toLowerCase());if(i<0)return str;return str.slice(0,i)+'<mark>'+str.slice(i,i+q.length)+'</mark>'+str.slice(i+q.length);}}
 function renderResults(q){{
   const ql=q.toLowerCase(),all=IDX.filter(m=>m.n.includes(ql)||m.d.toLowerCase().includes(ql)),res=all.slice(0,20);
-  head.textContent='Methods — '+all.length+' result'+(all.length!==1?'s':'');
+  head.textContent='Methods: '+all.length+' result'+(all.length!==1?'s':'');
   if(!res.length){{list.innerHTML='<div class="sd-empty">No methods match "<b>'+q+'</b>"</div>';}}
   else{{list.innerHTML=res.map(m=>`<div class="sd-row" data-anchor="method-${{m.n.replace(/_/g,'-')}}" onclick="goTo('method-${{m.n.replace(/_/g,'-')}}')"><span class="sd-dot" style="background:${{m.col}}"></span><span class="sd-name">${{hl('bot.'+m.n+'()',q)}}</span><span class="sd-doc">${{hl(m.d,q)}}</span><span class="sd-cat">${{m.c}}</span></div>`).join('');}}
   focused=-1;
@@ -1055,10 +1153,10 @@ HTML=HTML.replace('{SEARCH_INDEX_PLACEHOLDER}',_search_json)
 (SITE_DIR/"CNAME").write_text(CUSTOM_DOMAIN,encoding="utf-8")
 
 size_kb=len(HTML.encode())/1024
-print(f"\n✅ Generated: {SITE_DIR/'index.html'}")
+print(f"\nGenerated: {SITE_DIR/'index.html'}")
 print(f"   Size: {size_kb:.1f} KB")
 print(f"   Methods: {S['methods']}")
 print(f"   Types: {S['types']}")
 print(f"   Enums: {S['enums']}")
-print(f"✅ CNAME: {CUSTOM_DOMAIN}")
-print(f"\n🌐 Live at: https://{CUSTOM_DOMAIN}")
+print(f"CNAME: {CUSTOM_DOMAIN}")
+print(f"\nLive at: https://{CUSTOM_DOMAIN}")

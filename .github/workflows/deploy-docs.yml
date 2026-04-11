@@ -1,25 +1,24 @@
-name: 📚 Generate & Deploy Docs
+name: Generate and Deploy Docs
 
 on:
-  # Manual trigger from GitHub Actions tab
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+    paths:
+      - 'tgbotrs/src/**'
+      - 'scripts/**'
+      - '.github/workflows/deploy-docs.yml'
+
+  release:
+    types: [published]
+
   workflow_dispatch:
     inputs:
       message:
         description: 'Deployment message (optional)'
         required: false
         default: 'Manual docs deployment'
-
-  # Auto-run on push to main
-  push:
-    branches: [main]
-    paths:
-      - 'tgbotrs/src/**'
-      - 'scripts/**'
-      - '.github/workflows/deploy-docs.yml'
-
-  # Weekly auto-regeneration
-  schedule:
-    - cron: '0 6 * * 1'
 
 permissions:
   contents: write
@@ -32,40 +31,32 @@ concurrency:
 
 jobs:
   generate-and-deploy:
-    name: 🦀 Generate Docs & Deploy
+    name: Generate and deploy docs
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🐍 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 📦 Install Python dependencies
+      - name: Install Python dependencies
         run: pip install beautifulsoup4 lxml 2>/dev/null || true
 
-      - name: 🔄 Regenerate docs from source
-        run: |
-          echo "🦀 Starting tgbotrs documentation generator..."
-          python3 scripts/generate_docs.py
-          echo "✅ Documentation generated!"
+      - name: Generate docs from source
+        run: python3 scripts/generate_docs.py
 
-      - name: 📊 Docs stats
+      - name: Print generated file sizes
         run: |
-          echo "=== Generated Files ==="
           ls -lah site/
-          echo ""
-          echo "=== File Sizes ==="
           du -sh site/*
-          echo ""
-          echo "Total size: $(du -sh site/ | cut -f1)"
 
-      - name: 🚀 Deploy to GitHub Pages
+      - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -73,23 +64,7 @@ jobs:
           publish_branch: gh-pages
           force_orphan: true
           commit_message: |
-            📚 Auto-deploy docs: ${{ github.event.inputs.message || github.event.head_commit.message || 'scheduled update' }}
-            
-            Generated from: ${{ github.sha }}
-            Triggered by: ${{ github.event_name }}
-            
-            🦀 tgbotrs — Telegram Bot API for Rust
-            👤 Developed by Ankit Chaubey (https://github.com/ankit-chaubey)
+            docs: auto-deploy from ${{ github.ref_name }}
 
-      - name: ✅ Deployment complete
-        run: |
-          echo ""
-          echo "🎉 Docs successfully deployed!"
-          echo ""
-          echo "📖 Your docs are live at:"
-          echo "   https://ankit-chaubey.github.io/tgbotrs/"
-          echo ""
-          echo "🔗 Direct method links work like:"
-          echo "   https://ankit-chaubey.github.io/tgbotrs/#method-send-message"
-          echo "   https://ankit-chaubey.github.io/tgbotrs/#method-get-me"
-          echo ""
+            source: ${{ github.sha }}
+            trigger: ${{ github.event_name }}
