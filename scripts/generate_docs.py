@@ -47,20 +47,82 @@ src_polling  = load(SRC_DIR / "polling.rs")
 src_webhook  = load(SRC_DIR / "webhook.rs")
 print("Source files loaded")
 
-# ── Parse Methods ───────────────────────────────────────────────────────────────
-def parse_methods(content):
-    all_blocks = re.split(r'\nimpl Bot \{', content)
+# ── Load api.json (source of truth for counts, descriptions, fields, API version) ──
+def load_api_json():
+    candidates = [
+        ROOT_DIR / 'api.json',
+        ROOT_DIR.parent / 'api.json',
+    ]
+    for p in candidates:
+        if p.exists():
+            data = json.loads(p.read_text(encoding='utf-8'))
+            print(f"Loaded api.json: {data.get('version','?')} ({data.get('release_date','?')})")
+            return data
+    print("Warning: api.json not found, falling back to Rust source parsing")
+    return None
+
+API_DATA = load_api_json()
+API_VERSION   = API_DATA.get('version', 'Bot API 9.x').replace('Bot API ', '') if API_DATA else '9.x'
+API_RELEASE   = API_DATA.get('release_date', '') if API_DATA else ''
+
+# camelCase -> snake_case
+def _to_snake(name):
+    s = re.sub(r'([A-Z][a-z]+)', r'_\1', name)
+    s = re.sub(r'([a-z])([A-Z])', r'\1_\2', s)
+    return s.lower().lstrip('_')
+
+# ── Parse Methods from api.json ───────────────────────────────────────────────
+def parse_methods_from_api(api_data, rust_content):
+    """Build method list from api.json, enriched with Rust param info."""
+    # Build Rust param map: snake_name -> param_list
+    rust_params = _parse_rust_params(rust_content)
+
     methods = []
-    for block in all_blocks:
-        m = re.search(
-            r'/// (.*?)\n\s+/// See: (https://[^\n]+)\n\s+pub async fn (\w+)\(\s*&self,?(.*?)\)\s*->\s*Result<([^,\n{]+)',
-            block, re.DOTALL)
-        if not m: continue
-        doc, url, name, raw_p, ret = m.group(1).strip(), m.group(2).strip(), m.group(3), m.group(4), m.group(5).strip()
-        params_clean = re.sub(r'\s+', ' ', raw_p.strip()).rstrip(',')
-        param_list   = _parse_param_list(params_clean)
-        methods.append({'name':name,'doc':doc,'url':url,'params':params_clean,'param_list':param_list,'ret':ret})
+    for camel, m in api_data['methods'].items():
+        snake = _to_snake(camel)
+        desc  = ' '.join(m.get('description', [])).strip()
+        url   = m.get('href', f'https://core.telegram.org/bots/api#{camel.lower()}')
+        ret   = ', '.join(m.get('returns', ['Unknown']))
+
+        # Required params from api.json (ground truth)
+        api_fields = m.get('fields', [])
+        required_params = [
+            {'name': f['name'], 'type': ' | '.join(f['types']), 'doc': f.get('description',''), 'required': f['required']}
+            for f in api_fields
+        ]
+        # Optional params (for display in "optional params" table)
+        optional_params = [p for p in required_params if not p['required']]
+        required_params_only = [p for p in required_params if p['required']]
+
+        # Rust param_list (for code example generation)
+        rust_pl = rust_params.get(snake, [])
+
+        methods.append({
+            'name': snake,
+            'camel': camel,
+            'doc': desc,
+            'url': url,
+            'ret': ret,
+            'param_list': rust_pl,                 # for code examples
+            'required_params': required_params_only,
+            'optional_params': optional_params,
+            'all_api_params': required_params,
+        })
     return methods
+
+def _parse_rust_params(content):
+    """Extract param lists from Rust source for code example generation."""
+    result = {}
+    blocks = re.split(r'\nimpl Bot \{', content)
+    for block in blocks:
+        m = re.search(
+            r'pub async fn (\w+)\(\s*&self,?(.*?)\)\s*->\s*Result<',
+            block, re.DOTALL)
+        if not m:
+            continue
+        name, raw = m.group(1), m.group(2)
+        result[name] = _parse_param_list(re.sub(r'\s+', ' ', raw.strip()).rstrip(','))
+    return result
 
 def _parse_param_list(raw):
     params=[]; depth,cur=0,''
@@ -78,7 +140,7 @@ def _add_param(lst,raw):
     parts=raw.split(':',1)
     if len(parts)==2: lst.append({'name':parts[0].strip(),'type':parts[1].strip()})
 
-# ── Parse Optional Param Structs ────────────────────────────────────────────────
+# ── Parse Optional Param Structs from Rust (for code examples) ───────────────
 def parse_param_structs(content):
     pattern = re.compile(
         r'/// Optional parameters for \[`Bot::(\w+)`\]\n#\[derive[^\]]+\]\npub struct (\w+) \{(.*?)\}\n',
@@ -89,19 +151,57 @@ def parse_param_structs(content):
         result[method]={'struct':struct_name,'fields':[{'doc':d.strip(),'name':n.strip(),'type':t.strip().rstrip(',')} for d,n,t in fields]}
     return result
 
-# ── Parse Types ─────────────────────────────────────────────────────────────────
-def parse_structs(content):
+# ── Parse Types from api.json ────────────────────────────────────────────────
+def parse_types_from_api(api_data):
+    """Return (structs, union_types) from api.json."""
+    structs = []
+    unions  = []
+    for name, t in api_data['types'].items():
+        if t.get('subtypes'):
+            unions.append({'name': name, 'variants': t['subtypes'],
+                           'doc': ' '.join(t.get('description',[])),
+                           'url': t.get('href','')})
+        else:
+            fields = [
+                {'name': f['name'],
+                 'type': ' | '.join(f['types']),
+                 'doc':  f.get('description',''),
+                 'required': f['required']}
+                for f in t.get('fields', [])
+            ]
+            structs.append({'name': name, 'fields': fields,
+                            'doc': ' '.join(t.get('description',[])),
+                            'url': t.get('href','')})
+    return structs, unions
+
+# ── Fallback: parse Rust source when no api.json ─────────────────────────────
+def parse_methods_rust_only(content):
+    all_blocks = re.split(r'\nimpl Bot \{', content)
+    methods = []
+    for block in all_blocks:
+        m = re.search(
+            r'/// (.*?)\n\s+/// See: (https://[^\n]+)\n\s+pub async fn (\w+)\(\s*&self,?(.*?)\)\s*->\s*Result<([^,\n{]+)',
+            block, re.DOTALL)
+        if not m: continue
+        doc, url, name, raw_p, ret = m.group(1).strip(), m.group(2).strip(), m.group(3), m.group(4), m.group(5).strip()
+        params_clean = re.sub(r'\s+', ' ', raw_p.strip()).rstrip(',')
+        param_list   = _parse_param_list(params_clean)
+        methods.append({'name':name,'camel':name,'doc':doc,'url':url,'ret':ret,
+                        'param_list':param_list,'required_params':[],'optional_params':[],'all_api_params':[]})
+    return methods
+
+def parse_structs_rust(content):
     structs=[]
     for name,body in re.findall(r'pub struct (\w+) \{([^}]+)\}',content):
         fields=re.findall(r'pub (\w+): ([^,\n]+)',body)
-        structs.append({'name':name,'fields':[{'name':n,'type':t.strip().rstrip(',')} for n,t in fields]})
+        structs.append({'name':name,'fields':[{'name':n,'type':t.strip().rstrip(','),'doc':'','required':True} for n,t in fields],'doc':'','url':''})
     return structs
 
-def parse_enums(content):
+def parse_enums_rust(content):
     enums=[]
     for name,body in re.findall(r'pub enum (\w+) \{([^}]+)\}',content):
         variants=re.findall(r'\n\s+(\w+)',body)
-        enums.append({'name':name,'variants':variants})
+        enums.append({'name':name,'variants':variants,'doc':'','url':''})
     return enums
 
 # ── Code Example Generator ──────────────────────────────────────────────────────
@@ -203,15 +303,36 @@ def build_method_cards(categories,params_map,examples):
         methods=categories[cat]
         html+=f'\n    <section class="cat-section" id="cat-{cat_id}">\n      <div class="cat-header"><h2 class="cat-title">{h(cat)}</h2><span class="cat-count">{len(methods)}</span></div>\n      <div class="methods-grid">\n'
         for m in methods:
-            name=m['name']; s=slug(name); doc=h(m['doc']); ret=h(m['ret']); has_opt=name in params_map
-            param_pills=''.join(
-                f'<span class="param-pill {"optional" if "Option<" in p["type"] or p["name"]=="params" else "required"}" title="{h(p["type"])}">{h(p["name"])}</span>'
-                for p in m['param_list']
-            ) or '<span class="no-params">no parameters</span>'
+            name=m['name']; s=slug(name); doc=h(m['doc']); ret=h(m['ret'])
+            has_rust = name in params_map
+
+            # Required param pills from api.json if available
+            if m.get('required_params'):
+                param_pills=''.join(
+                    '<span class="param-pill required" title="'+h(p['type'])+'">'+h(p['name'])+'</span>'
+                    for p in m['required_params']
+                ) or '<span class="no-params">no required parameters</span>'
+            else:
+                param_pills=''.join(
+                    f'<span class="param-pill {"optional" if "Option<" in p["type"] or p["name"]=="params" else "required"}" title="{h(p["type"])}">{h(p["name"])}</span>'
+                    for p in m['param_list']
+                ) or '<span class="no-params">no parameters</span>'
+
+            # Optional params table from api.json, fall back to Rust struct
             opt_html=''
-            if has_opt:
+            if m.get('optional_params'):
+                rows=''.join(
+                    f'<tr><td class="field-name">{h(f["name"])}</td><td class="field-type">{h(f["type"])}</td><td class="field-doc">{h(f.get("doc",""))}</td></tr>'
+                    for f in m['optional_params']
+                )
+                count=len(m['optional_params'])
+                opt_html=f'''
+            <div class="optional-section">
+              <div class="section-label">Optional parameters <span class="field-count">{count} fields</span></div>
+              <div class="table-wrap"><table class="fields-table"><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>{rows}</tbody></table></div>
+            </div>'''
+            elif has_rust:
                 fields=params_map[name].get('fields',[]); struct_name=params_map[name]['struct']
-                # ALL FIELDS (no truncation)
                 rows=''.join(
                     f'<tr><td class="field-name">{h(f["name"])}</td><td class="field-type">{h(f["type"])}</td><td class="field-doc">{h(f.get("doc",""))}</td></tr>'
                     for f in fields
@@ -221,7 +342,9 @@ def build_method_cards(categories,params_map,examples):
               <div class="section-label">Optional params: <code>{h(struct_name)}</code><span class="field-count">{len(fields)} fields</span></div>
               <div class="table-wrap"><table class="fields-table"><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>{rows}</tbody></table></div>
             </div>'''
-            code=h(examples.get(name,'// example not available'))
+
+            code=h(examples.get(name,'// not yet in generated Rust source'))
+            has_opts = bool(m.get('optional_params') or has_rust)
             html+=f'''
         <div class="method-card" id="method-{s}" data-name="{name}" data-cat="{h(cat)}">
           <div class="method-header" onclick="toggleCard(this)">
@@ -230,14 +353,14 @@ def build_method_cards(categories,params_map,examples):
               <div class="method-badges">
                 <span class="badge badge-async">async</span>
                 <span class="badge badge-ret">→ {ret}</span>
-                {'<span class="badge badge-opt">+opts</span>' if has_opt else ''}
+                {'<span class="badge badge-opt">+opts</span>' if has_opts else ''}
               </div>
               <span class="card-toggle-arrow">▾</span>
             </div>
             <p class="method-doc">{doc}</p>
           </div>
           <div class="method-body collapsed-body">
-            <div class="params-section"><div class="section-label">Parameters</div><div class="param-pills">{param_pills}</div></div>
+            <div class="params-section"><div class="section-label">Required parameters</div><div class="param-pills">{param_pills}</div></div>
             {opt_html}
             <div class="example-section">
               <div class="example-header">
@@ -281,13 +404,14 @@ def build_types_html(types_list):
     html=''
     for t in types_list:
         name=h(t['name'])
-        # ALL fields
         fields_html=''.join(
-            f'<div class="type-field"><span class="type-field-name">{h(f["name"])}</span><span class="type-field-type">{h(f["type"])}</span></div>'
+            '<div class="type-field" title="'+h(f.get('doc',''))+'"><span class="type-field-name">'+h(f['name'])+'</span><span class="type-field-type">'+h(f['type'])+'</span></div>'
             for f in t['fields']
         ) or '<div class="type-empty">no public fields</div>'
         count=len(t['fields'])
-        html+=f'\n    <div class="type-card" id="type-{name.lower()}"><div class="type-name">{name} <span class="type-field-count">{count}</span></div><div class="type-fields">{fields_html}</div></div>\n'
+        doc_snippet = h(t.get('doc','')[:120])
+        doc_attr = f' title="{doc_snippet}"' if doc_snippet else ''
+        html+=f'\n    <div class="type-card" id="type-{name.lower()}"{doc_attr}><div class="type-name">{name} <span class="type-field-count">{count}</span></div><div class="type-fields">{fields_html}</div></div>\n'
     return html
 
 def build_enums_html(enums_list):
@@ -298,20 +422,26 @@ def build_enums_html(enums_list):
         html+=f'\n    <div class="enum-card" id="enum-{name.lower()}"><div class="enum-name">{name}</div><div class="enum-variants">{variants}</div></div>\n'
     return html
 
-# ── Main ────────────────────────────────────────────────────────────────────────
+# ── Main ─────────────────────────────────────────────────────────────────────
 print("\nParsing methods...")
-methods=parse_methods(gen_methods)
+if API_DATA:
+    methods = parse_methods_from_api(API_DATA, gen_methods)
+else:
+    methods = parse_methods_rust_only(gen_methods)
 print(f"   Found {len(methods)} methods")
 
-print("Parsing param structs...")
+print("Parsing param structs (Rust source)...")
 params_map=parse_param_structs(gen_methods)
 print(f"   Found {len(params_map)} optional param structs")
 
 print("Parsing types...")
-types_structs=parse_structs(gen_types); types_enums=parse_enums(gen_types)
-hand_structs=parse_structs(hand_types); hand_enums=parse_enums(hand_types)
-all_structs=types_structs+hand_structs; all_enums=types_enums+hand_enums
-print(f"   Found {len(all_structs)} structs, {len(all_enums)} enums")
+if API_DATA:
+    all_structs, all_enums = parse_types_from_api(API_DATA)
+else:
+    types_structs=parse_structs_rust(gen_types); types_enums=parse_enums_rust(gen_types)
+    hand_structs=parse_structs_rust(hand_types); hand_enums=parse_enums_rust(hand_types)
+    all_structs=types_structs+hand_structs; all_enums=types_enums+hand_enums
+print(f"   Found {len(all_structs)} structs, {len(all_enums)} union/abstract types")
 
 print("Generating code examples...")
 examples={m['name']:generate_example(m,params_map) for m in methods}
@@ -652,13 +782,13 @@ button{{cursor:pointer;border:none;background:none;font-family:inherit;color:inh
 <div class="hero">
   <div class="hero-bg"></div>
   <div class="hero-content">
-    <div class="hero-badge">🦀 Telegram Bot API 9.4 · Auto-Generated · v{CRATE_VERSION}</div>
+    <div class="hero-badge">🦀 Telegram Bot API {API_VERSION} · Auto-Generated · v{CRATE_VERSION}</div>
     <h1>The <span class="grad">complete</span> Rust<br>Telegram Bot library</h1>
     <p class="hero-desc"><strong>tgbotrs</strong> gives you every Telegram Bot API method and type, fully typed, fully async, auto-generated from the official spec. Built with Tokio. Rust 1.75+.</p>
     <div class="hero-stats">
       <div class="stat-item"><span class="stat-num">{S["methods"]}</span><span class="stat-label">Methods</span></div>
       <div class="stat-item"><span class="stat-num">{S["types"]}</span><span class="stat-label">Types</span></div>
-      <div class="stat-item"><span class="stat-num">9.4</span><span class="stat-label">API Version</span></div>
+      <div class="stat-item"><span class="stat-num">{API_VERSION}</span><span class="stat-label">API Version</span></div>
       <div class="stat-item"><span class="stat-num">100%</span><span class="stat-label">Async</span></div>
     </div>
     <div class="hero-btns">
